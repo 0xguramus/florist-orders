@@ -4,7 +4,7 @@ Password-protected order log for the flower shop. Cloudflare Pages + Pages Funct
 
 - `public/` — static site (output directory)
 - `functions/_middleware.js` — protects everything except `/login`, `/fonts/*`, `/api/login`, `/api/logout`
-- `functions/api/` — `orders` (GET, POST, PUT/DELETE `/:id`), `flowers` (GET, POST, PUT/DELETE `/:id`), `login`, `logout`
+- `functions/api/` — `orders` (GET, POST, PUT/DELETE `/:id`), `flowers` (GET, POST, PUT/DELETE `/:id`), `writeoffs` (ჩამოწერა: GET, POST, GET/PUT/DELETE `/:id`), `login`, `logout`
 - `schema.sql` — reference schema; tables are created automatically on the first request
 
 ## Cloudflare Pages settings

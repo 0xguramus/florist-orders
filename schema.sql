@@ -29,6 +29,26 @@ CREATE TABLE IF NOT EXISTS order_items (
 CREATE INDEX IF NOT EXISTS idx_items_order  ON order_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_items_flower ON order_items(flower_id);
 
+CREATE TABLE IF NOT EXISTS write_offs (            -- ჩამოწერა: wasted / damaged flowers
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  date       TEXT    NOT NULL,                    -- YYYY-MM-DD
+  reason     TEXT    NOT NULL DEFAULT 'other' CHECK (reason IN ('dried','damaged','other')),
+  note       TEXT    NOT NULL DEFAULT '',
+  created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_write_offs_date ON write_offs(date);
+
+CREATE TABLE IF NOT EXISTS write_off_items (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  write_off_id INTEGER NOT NULL REFERENCES write_offs(id) ON DELETE CASCADE,
+  flower_id    INTEGER REFERENCES flowers(id),
+  flower_name  TEXT    NOT NULL,                  -- name snapshot
+  qty          INTEGER NOT NULL CHECK (qty > 0)
+);
+CREATE INDEX IF NOT EXISTS idx_wo_items_wo     ON write_off_items(write_off_id);
+CREATE INDEX IF NOT EXISTS idx_wo_items_flower ON write_off_items(flower_id);
+
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT

@@ -14,7 +14,7 @@
 <title>შეკვეთების ჟურნალი</title>
 <link rel="preload" href="/fonts/FiraGO-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/FiraGO-SemiBold.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/style.css?v=5">
+<link rel="stylesheet" href="/style.css?v=6">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -32,6 +32,7 @@
   <symbol id="i-note" viewBox="0 0 24 24"><path d="M5 4h10l4 4v12H5z"/><path d="M9 12h6M9 16h4"/></symbol>
   <symbol id="i-cal" viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="14" rx="2.5"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></symbol>
   <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10"/></symbol>
+  <symbol id="i-waste" viewBox="0 0 24 24"><path d="M12 21v-8"/><path d="M12 13c-3.5 0-6-2.3-6-5.5 2.6 0 4.6 1 6 3 1.4-2 3.4-3 6-3 0 3.2-2.5 5.5-6 5.5z"/><path d="M8 21h8"/><path d="M4 4l16 16"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
 </svg>
 
@@ -104,6 +105,49 @@
     <div id="orders"></div>
   </section>
 
+  <!-- ჩამოწერა -->
+  <section id="view-writeoff" class="view">
+    <form id="wo-form" autocomplete="off" novalidate>
+      <h2>ჩამოწერა</h2>
+      <p class="lead">გამხმარი ან დაზიანებული ყვავილები, რომლებიც გასაყიდად აღარ გამოდგება.</p>
+
+      <div class="card">
+        <label>თარიღი
+          <input id="w-date" type="date" required>
+        </label>
+        <div class="field-l">მიზეზი</div>
+        <div class="seg" role="radiogroup" aria-label="მიზეზი">
+          <label class="seg-o"><input type="radio" name="w-reason" value="dried" checked><span>გამხმარი</span></label>
+          <label class="seg-o"><input type="radio" name="w-reason" value="damaged"><span>დაზიანებული</span></label>
+          <label class="seg-o"><input type="radio" name="w-reason" value="other"><span>სხვა</span></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="rows-head">
+          <span class="sec-title">ჩამოსაწერი ყვავილები</span>
+        </div>
+        <div id="w-rows"></div>
+        <small class="err" id="err-w-rows"></small>
+        <button type="button" class="btn dashed full" id="btn-w-add-row"><svg class="ic"><use href="#i-plus"/></svg>ყვავილის დამატება</button>
+        <p class="total-line" id="w-total-line"></p>
+      </div>
+
+      <div class="card">
+        <label class="last">შენიშვნა <span class="opt">არასავალდებულო</span>
+          <input id="w-note" type="text" placeholder="მაგ., მიწოდებისას დაზიანდა">
+        </label>
+      </div>
+
+      <div class="actions">
+        <button type="submit" class="btn primary full" id="btn-w-save">ჩამოწერა</button>
+      </div>
+    </form>
+
+    <h3 class="sec-h">ჩამოწერის ისტორია</h3>
+    <div id="writeoffs"></div>
+  </section>
+
   <!-- შეჯამება -->
   <section id="view-summary" class="view">
     <h2>შეჯამება</h2>
@@ -128,6 +172,7 @@
 <nav class="tabbar" aria-label="ნავიგაცია">
   <button class="tab active" data-view="form"><svg class="ic"><use href="#i-new"/></svg><span>ახალი შეკვეთა</span></button>
   <button class="tab" data-view="list"><svg class="ic"><use href="#i-list"/></svg><span>შეკვეთები</span></button>
+  <button class="tab" data-view="writeoff"><svg class="ic"><use href="#i-waste"/></svg><span>ჩამოწერა</span></button>
   <button class="tab" data-view="summary"><svg class="ic"><use href="#i-chart"/></svg><span>შეჯამება</span></button>
 </nav>
 
@@ -158,6 +203,6 @@
 </div>
 
 <div id="toast" role="status"></div>
-<script src="/app.js?v=5"></script>
+<script src="/app.js?v=6"></script>
 </body>
 </html>

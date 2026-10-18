@@ -31,16 +31,22 @@ async function api(path, { method = 'GET', body } = {}) {
 }
 
 /* ---------- მონაცემები ---------- */
-const db = { flowers: [], orders: [] };
+const db = { flowers: [], orders: [], writeoffs: [] };
 const sameId = (a, b) => String(a) === String(b);
 const flowerName = id => db.flowers.find(f => sameId(f.id, id))?.name;
 async function fetchOrders() { db.orders = (await api('orders')).orders; }
 async function fetchFlowers() { db.flowers = (await api('flowers')).flowers; }
+async function fetchWriteOffs() { db.writeoffs = (await api('writeoffs')).writeoffs; }
 // ხედის გადართვისას ახალი მონაცემები წამოვიღოთ (ფლორისტის შეყვანილი სხვა მოწყობილობიდანაც ჩანს)
 let refreshing = null;
 function refreshOrders(render) {
   if (!refreshing) refreshing = fetchOrders().finally(() => { refreshing = null; });
   refreshing.then(render, e => toast(e.message));
+}
+let refreshingWo = null;
+function refreshWriteOffs(render) {
+  if (!refreshingWo) refreshingWo = fetchWriteOffs().finally(() => { refreshingWo = null; });
+  refreshingWo.then(render, e => toast(e.message));
 }
 
 /* ---------- ნავიგაცია ---------- */
@@ -49,7 +55,12 @@ function show(view) {
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
   document.body.dataset.view = view;
   if (view === 'list') { renderOrders(); refreshOrders(() => document.body.dataset.view === 'list' && renderOrders()); }
-  if (view === 'summary') { renderSummary(); refreshOrders(() => document.body.dataset.view === 'summary' && renderSummary()); }
+  if (view === 'writeoff') { renderWriteOffs(); refreshWriteOffs(() => document.body.dataset.view === 'writeoff' && renderWriteOffs()); }
+  if (view === 'summary') {
+    renderSummary();
+    const again = () => document.body.dataset.view === 'summary' && renderSummary();
+    refreshOrders(again); refreshWriteOffs(again);
+  }
   window.scrollTo(0, 0);
 }
 $$('.tab').forEach(t => t.addEventListener('click', () => show(t.dataset.view)));
@@ -67,7 +78,10 @@ function flowerOptions(selected) {
   const opts = db.flowers.map(f => `<option value="${f.id}"${sameId(f.id, selected) ? ' selected' : ''}>${esc(f.name)}</option>`);
   return `<option value="">ყვავილი…</option>${opts.join('')}<option value="__new">＋ ახალი ყვავილი…</option>`;
 }
-function addRow(flowerId = '', qty = 1, fallbackName = '') {
+// box: მწკრივების კონტეინერი (#rows — შეკვეთა, #w-rows — ჩამოწერა)
+const totalFor = box => box.id === 'w-rows' ? updateWoTotal : updateTotal;
+function addRow(flowerId = '', qty = 1, fallbackName = '', box = $('#rows')) {
+  const upd = totalFor(box);
   const row = document.createElement('div');
   row.className = 'row';
   let opts = flowerOptions(flowerId);
@@ -91,25 +105,40 @@ function addRow(flowerId = '', qty = 1, fallbackName = '') {
         catch (e) { toast(e.message); }
       }
     }
-    updateTotal();
+    upd();
   });
-  $('.dec', row).onclick = () => { q.value = Math.max(1, (+q.value || 1) - 1); updateTotal(); };
-  $('.inc', row).onclick = () => { q.value = (+q.value || 0) + 1; updateTotal(); };
-  q.addEventListener('input', updateTotal);
-  $('.rm', row).onclick = () => { row.remove(); if (!$$('#rows .row').length) addRow(); updateTotal(); };
-  $('#rows').appendChild(row);
-  updateTotal();
+  $('.dec', row).onclick = () => { q.value = Math.max(1, (+q.value || 1) - 1); upd(); };
+  $('.inc', row).onclick = () => { q.value = (+q.value || 0) + 1; upd(); };
+  q.addEventListener('input', upd);
+  $('.rm', row).onclick = () => { row.remove(); if (!$$('.row', box).length) addRow('', 1, '', box); upd(); };
+  box.appendChild(row);
+  upd();
 }
 function refreshSelects() {
-  $$('#rows select').forEach(sel => {
+  $$('#rows select, #w-rows select').forEach(sel => {
     const v = sel.value, keep = sel.querySelector('option[data-name]');
     sel.innerHTML = (keep ? keep.outerHTML : '') + flowerOptions(v);
     sel.value = v;
   });
 }
+const rowsTotal = box => $$('.row', box).reduce((s, r) => s + ($('select', r).value ? (+$('input', r).value || 0) : 0), 0);
 function updateTotal() {
-  const n = $$('#rows .row').reduce((s, r) => s + ($('select', r).value ? (+$('input', r).value || 0) : 0), 0);
+  const n = rowsTotal($('#rows'));
   $('#total-line').innerHTML = n ? `სულ <b>${n}</b> ღერო` : '';
+}
+function updateWoTotal() {
+  const n = rowsTotal($('#w-rows'));
+  $('#w-total-line').innerHTML = n ? `ჩამოიწერება <b>${n}</b> ღერო` : '';
+}
+// მწკრივებიდან [{flowerId, qty}] — ერთნაირი ყვავილები ერთიანდება
+function collectItems(box) {
+  const map = new Map();
+  $$('.row', box).forEach(r => {
+    const id = $('select', r).value, qty = parseInt($('input', r).value, 10) || 0;
+    if (!id || qty < 1) return;
+    map.set(id, { flowerId: Number(id), qty: (map.get(id)?.qty || 0) + qty });
+  });
+  return [...map.values()];
 }
 function resetForm() {
   editingId = null;
@@ -161,13 +190,7 @@ $('#order-form').addEventListener('submit', async e => {
   if (!ok) $('#f-number').classList.add('invalid');
 
   // ერთნაირი ყვავილის მწკრივები გავაერთიანოთ
-  const map = new Map();
-  $$('#rows .row').forEach(r => {
-    const id = $('select', r).value, qty = parseInt($('input', r).value, 10) || 0;
-    if (!id || qty < 1) return;
-    map.set(id, { flowerId: Number(id), qty: (map.get(id)?.qty || 0) + qty });
-  });
-  const items = [...map.values()];
+  const items = collectItems($('#rows'));
   if (!items.length) { $('#err-rows').textContent = 'დაამატეთ ერთი ყვავილი მაინც.'; ok = false; }
   if (!ok) { $('.err:not(:empty)')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
 
@@ -231,14 +254,14 @@ function renderFlowerList() {
       try {
         await api(`flowers/${id}`, { method: 'PUT', body: { name } });
         f.name = name;
-        db.orders.forEach(o => o.items.forEach(it => { if (sameId(it.flowerId, id)) it.name = name; }));
+        [...db.orders, ...db.writeoffs].forEach(o => o.items.forEach(it => { if (sameId(it.flowerId, id)) it.name = name; }));
         refreshSelects(); toast('სახელი შეიცვალა.');
       } catch (err) { inp.value = f.name; toast(err.message); }
       inp.disabled = false;
     });
     $('.rm', li).onclick = async () => {
       const f = db.flowers.find(x => sameId(x.id, id));
-      if (!f || !confirm(`წაიშალოს „${f.name}“ სიიდან? ძველ შეკვეთებში ეს სახელი შენარჩუნდება.`)) return;
+      if (!f || !confirm(`წაიშალოს „${f.name}“ სიიდან? ძველ შეკვეთებსა და ჩამოწერებში ეს სახელი შენარჩუნდება.`)) return;
       try {
         await api(`flowers/${id}`, { method: 'DELETE' });
         db.flowers = db.flowers.filter(x => !sameId(x.id, id)); renderFlowerList(); refreshSelects();
@@ -305,6 +328,81 @@ function renderOrders() {
 }
 $('#search').addEventListener('input', renderOrders);
 
+/* ---------- ჩამოწერა ---------- */
+const stemsOf = r => r.items.reduce((t, i) => t + i.qty, 0);
+const REASONS = { dried: 'გამხმარი', damaged: 'დაზიანებული', other: 'სხვა' };
+function resetWoForm() {
+  $('#wo-form').reset();
+  $('#w-date').value = toDateInput(new Date());
+  $('#w-rows').innerHTML = '';
+  $('#err-w-rows').textContent = '';
+  addRow('', 1, '', $('#w-rows'));
+}
+$('#btn-w-add-row').onclick = () => addRow('', 1, '', $('#w-rows'));
+
+let woSaving = false;
+$('#wo-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (woSaving) return;
+  $('#err-w-rows').textContent = '';
+  const items = collectItems($('#w-rows'));
+  if (!items.length) {
+    $('#err-w-rows').textContent = 'დაამატეთ ერთი ყვავილი მაინც.';
+    $('#err-w-rows').scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return;
+  }
+  const data = {
+    date: $('#w-date').value || toDateInput(new Date()),
+    reason: $('input[name=w-reason]:checked')?.value || 'other',
+    note: $('#w-note').value.trim(),
+    items,
+  };
+  const btn = $('#btn-w-save'), label = btn.textContent;
+  woSaving = true; btn.disabled = true; btn.textContent = 'ინახება…';
+  try {
+    const { writeoff } = await api('writeoffs', { method: 'POST', body: data });
+    db.writeoffs.push(writeoff);
+    const n = writeoff.items.reduce((t, i) => t + i.qty, 0);
+    toast(`ჩამოიწერა ${n} ღერო.`);
+    resetWoForm(); renderWriteOffs();
+  } catch (err) { toast(err.message); }
+  woSaving = false; btn.disabled = false; btn.textContent = label;
+});
+
+function renderWriteOffs() {
+  const list = [...db.writeoffs].sort((a, b) => dayOf(b.date).localeCompare(dayOf(a.date)) || b.id - a.id);
+  if (!list.length) { $('#writeoffs').innerHTML = empty('🍂', 'ჩამოწერილი ყვავილები ჯერ არ არის.'); return; }
+  $('#writeoffs').innerHTML = list.map(w => {
+    const stems = w.items.reduce((s, i) => s + i.qty, 0);
+    return `
+    <article class="card order wo">
+      <div class="card-h">
+        <div class="num"><span class="reason r-${esc(w.reason)}">${esc(REASONS[w.reason] || REASONS.other)}</span></div>
+        <div class="price neg">−${stems} ღერო</div>
+      </div>
+      <div class="meta"><span><svg class="ic"><use href="#i-cal"/></svg>${fmtDate(w.date)}</span></div>
+      <ul class="items">${w.items.map(i => `<li>${esc(flowerName(i.flowerId) || i.name)}<b>${i.qty}</b></li>`).join('')}</ul>
+      ${w.note ? `<div class="note"><svg class="ic"><use href="#i-note"/></svg><span>${esc(w.note)}</span></div>` : ''}
+      <div class="card-a">
+        <button class="btn danger sm" data-wdel="${w.id}"><svg class="ic"><use href="#i-trash"/></svg>წაშლა</button>
+      </div>
+    </article>`;
+  }).join('');
+  $$('[data-wdel]').forEach(b => b.onclick = async () => {
+    const w = db.writeoffs.find(x => sameId(x.id, b.dataset.wdel));
+    if (!w || !confirm(`წაიშალოს ჩამოწერა (${fmtDate(w.date)}, ${stemsOf(w)} ღერო)? ამ მოქმედებას ვეღარ გააუქმებთ.`)) return;
+    b.disabled = true;
+    try {
+      await api(`writeoffs/${w.id}`, { method: 'DELETE' });
+    } catch (err) {
+      b.disabled = false;
+      if (err.status !== 404) { toast(err.message); return; }
+    }
+    db.writeoffs = db.writeoffs.filter(x => !sameId(x.id, w.id)); renderWriteOffs();
+    toast('ჩამოწერა წაიშალა.');
+  });
+}
+
 /* ---------- შეჯამება ---------- */
 let range = 'today';
 function rangeBounds() {
@@ -320,34 +418,47 @@ function rangeBounds() {
   }
   return [start, end];
 }
-function renderSummary() {
-  $('#custom-range').hidden = range !== 'custom';
-  const [s, e] = rangeBounds();
-  const orders = db.orders.filter(o => { const d = dayDate(o.date); return d >= s && d < e; });
-  if (!orders.length) { $('#summary').innerHTML = empty('🌱', 'ამ პერიოდში შეკვეთა არ არის.'); return; }
+function flowerTotals(records) {
   const totals = new Map();
-  orders.forEach(o => o.items.forEach(i => {
+  records.forEach(o => o.items.forEach(i => {
     const name = flowerName(i.flowerId) || i.name;
     totals.set(name, (totals.get(name) || 0) + i.qty);
   }));
-  const rows = [...totals].sort((a, b) => b[1] - a[1]);
-  const stems = rows.reduce((t, r) => t + r[1], 0);
+  return [...totals].sort((a, b) => b[1] - a[1]);
+}
+function barsCard(rows, cls = '') {
+  const total = rows.reduce((t, r) => t + r[1], 0), max = rows[0][1];
+  return `
+    <div class="card table-card ${cls}">
+      <div class="t-head"><span>ყვავილი</span><span>რაოდენობა</span></div>
+      <ul class="bars">${rows.map(([n, q]) => `
+        <li><div class="bar-l"><span>${esc(n)}</span><b>${q}</b></div>
+        <div class="bar"><i style="width:${Math.max(4, Math.round(q / max * 100))}%"></i></div></li>`).join('')}
+      </ul>
+      <div class="t-foot"><span>სულ</span><b>${total}</b></div>
+    </div>`;
+}
+function renderSummary() {
+  $('#custom-range').hidden = range !== 'custom';
+  const [s, e] = rangeBounds();
+  const inRange = r => { const d = dayDate(r.date); return d >= s && d < e; };
+  const orders = db.orders.filter(inRange);
+  const wos = db.writeoffs.filter(inRange);
+  if (!orders.length && !wos.length) { $('#summary').innerHTML = empty('🌱', 'ამ პერიოდში შეკვეთა და ჩამოწერა არ არის.'); return; }
+  const sold = flowerTotals(orders), lost = flowerTotals(wos);
+  const stems = sold.reduce((t, r) => t + r[1], 0);
+  const lostStems = lost.reduce((t, r) => t + r[1], 0);
   const revenue = orders.reduce((t, o) => t + (o.price || 0), 0);
-  const max = rows[0][1];
   $('#summary').innerHTML = `
     <div class="stats">
       <div class="stat"><b>${orders.length}</b><span>შეკვეთა</span></div>
       <div class="stat"><b>${stems}</b><span>ღერო</span></div>
       <div class="stat accent"><b>${revenue.toFixed(0)} ₾</b><span>შემოსავალი</span></div>
     </div>
-    <div class="card table-card">
-      <div class="t-head"><span>ყვავილი</span><span>რაოდენობა</span></div>
-      <ul class="bars">${rows.map(([n, q]) => `
-        <li><div class="bar-l"><span>${esc(n)}</span><b>${q}</b></div>
-        <div class="bar"><i style="width:${Math.max(4, Math.round(q / max * 100))}%"></i></div></li>`).join('')}
-      </ul>
-      <div class="t-foot"><span>სულ</span><b>${stems}</b></div>
-    </div>`;
+    <h3 class="sec-h">გაყიდული</h3>
+    ${sold.length ? barsCard(sold) : `<div class="card muted-card">ამ პერიოდში შეკვეთა არ არის.</div>`}
+    <h3 class="sec-h">ჩამოწერილი${lostStems ? ` <span class="sec-n">${lostStems} ღერო</span>` : ''}</h3>
+    ${lost.length ? barsCard(lost, 'loss') : `<div class="card muted-card">ამ პერიოდში ჩამოწერა არ არის.</div>`}`;
 }
 $$('.chip').forEach(c => c.addEventListener('click', () => {
   range = c.dataset.range;
@@ -391,23 +502,32 @@ $('#btn-logout').onclick = async () => {
   $('#today-line').textContent = `${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`; }
 document.body.dataset.view = 'form';
 
+let booted = false;
 async function boot() {
   $('#boot').hidden = false; $('#boot-load').hidden = false; $('#boot-err').hidden = true;
+  // ძალიან ნელი ქსელის შემთხვევაში „იტვირთება…“ სამუდამოდ არ უნდა დარჩეს
+  const timeout = new Promise((_, rej) => setTimeout(() => rej(new ApiError('სერვერი დიდხანს არ პასუხობს. სცადეთ თავიდან.', 0)), 20000));
   try {
-    await Promise.all([fetchFlowers(), fetchOrders()]);
+    await Promise.race([Promise.all([fetchFlowers(), fetchOrders(), fetchWriteOffs()]), timeout]);
+    resetForm(); resetWoForm();
   } catch (e) {
-    if (e.status === 401) return;
+    if (e.status === 401) return; // გადამისამართება შესვლის გვერდზე
     $('#boot-load').hidden = true; $('#boot-err').hidden = false; $('#boot-msg').textContent = e.message;
     return;
   }
-  resetForm();
-  $('#boot').hidden = true;
+  booted = true;
+  // ჩატვირთვის ეკრანი DOM-იდან ამოვიღოთ, რომ „იტვირთება…“ აღარსად გამოჩნდეს
+  $('#boot').remove();
 }
 $('#btn-retry').onclick = boot;
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible' || !$('#boot').hidden) return;
+  if (document.visibilityState !== 'visible' || !booted) return;
   const v = document.body.dataset.view;
-  if (v === 'list' || v === 'summary') refreshOrders(() => v === 'list' ? renderOrders() : renderSummary());
+  if (v === 'list') refreshOrders(renderOrders);
+  else if (v === 'writeoff') refreshWriteOffs(renderWriteOffs);
+  else if (v === 'summary') { refreshOrders(renderSummary); refreshWriteOffs(renderSummary); }
   else fetchOrders().catch(() => {});
 });
+// iOS Safari-ში „უკან“ ღილაკით (bfcache) დაბრუნებისას მონაცემები განვაახლოთ
+window.addEventListener('pageshow', e => { if (e.persisted && !booted) location.reload(); });
 boot();

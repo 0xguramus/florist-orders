@@ -2,7 +2,7 @@ import { handler, json, readJson, parseId, cleanName, HttpError } from '../../_l
 
 const notFound = () => new HttpError(404, 'ყვავილი ვერ მოიძებნა.');
 
-// PUT /api/flowers/:id — rename (also updates the name in existing orders)
+// PUT /api/flowers/:id — rename (also updates the name in existing orders and write-offs)
 export const onRequestPut = handler(async ({ params, request, env }) => {
   const id = parseId(params.id), db = env.DB;
   const name = cleanName((await readJson(request))?.name);
@@ -11,6 +11,7 @@ export const onRequestPut = handler(async ({ params, request, env }) => {
   const [upd] = await db.batch([
     db.prepare('UPDATE flowers SET name = ? WHERE id = ?').bind(name, id),
     db.prepare('UPDATE order_items SET flower_name = ? WHERE flower_id = ?').bind(name, id),
+    db.prepare('UPDATE write_off_items SET flower_name = ? WHERE flower_id = ?').bind(name, id),
   ]);
   if (!upd.meta.changes) throw notFound();
   return json({ flower: { id, name } });
