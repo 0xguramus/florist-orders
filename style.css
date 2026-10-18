@@ -57,10 +57,10 @@ input:focus,select:focus{outline:none;border-color:var(--ac);background-color:va
 input[type=search]::-webkit-search-decoration{-webkit-appearance:none}
 .num-wrap{position:relative;display:block}
 .num-prefix{position:absolute;left:14px;top:50%;transform:translateY(-50%);margin-top:3px;color:var(--mu);font-weight:600;pointer-events:none}
-.num-wrap input{padding-left:34px;font-weight:600}
+.num-wrap input{padding-left:32px;padding-right:8px;font-weight:600}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
 .grid2>label{min-width:0}
-.grid2.nd{grid-template-columns:2fr 3.3fr}
+.grid2.nd{grid-template-columns:2.15fr 3.1fr}
 @media(max-width:360px){.grid2,.grid2.nd{grid-template-columns:1fr}}
 input[type=datetime-local],input[type=date]{min-width:0;max-width:100%;font-size:14.5px;padding-left:12px;padding-right:10px}
 .err{color:var(--red);font-size:12px;font-weight:500;display:block}
