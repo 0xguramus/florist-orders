@@ -1,4 +1,4 @@
-# შეკვეთების ჟურნალი (florist-orders)
+# FLOWTRACKER (florist-orders)
 
 Password-protected order log for the flower shop. Cloudflare Pages + Pages Functions + D1.
 
