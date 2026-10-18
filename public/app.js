@@ -1,53 +1,55 @@
 'use strict';
-/* შეკვეთების ჟურნალი — პროტოტიპი. მონაცემები localStorage-ში ინახება. */
-const KEY = 'florist-orders-v1';
-const DEFAULT_FLOWERS = ['ვარდი წითელი', 'ვარდი თეთრი', 'ტულიფანი', 'ქრიზანთემა', 'ევკალიფტი', 'გიპსოფილა', 'ლისიანთუსი'];
-
+/* შეკვეთების ჟურნალი — მონაცემები Cloudflare D1 ბაზაში ინახება (/api). */
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
-const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pad = n => String(n).padStart(2, '0');
 const toDateInput = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const MONTHS = ['იანვარი', 'თებერვალი', 'მარტი', 'აპრილი', 'მაისი', 'ივნისი', 'ივლისი', 'აგვისტო', 'სექტემბერი', 'ოქტომბერი', 'ნოემბერი', 'დეკემბერი'];
-// Dates are stored as 'YYYY-MM-DD'; older records may hold a full ISO datetime — use its local date part.
 const dayOf = v => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? v : toDateInput(new Date(v));
 const dayDate = v => new Date(dayOf(v) + 'T00:00');
 const fmtDate = v => { const d = dayDate(v); return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
 const money = v => (v == null || v === '') ? '' : Number(v).toFixed(2) + ' ₾';
 
+/* ---------- API ---------- */
+class ApiError extends Error { constructor(msg, status) { super(msg); this.status = status; } }
+async function api(path, { method = 'GET', body } = {}) {
+  let r;
+  try {
+    r = await fetch('/api/' + path, {
+      method, credentials: 'same-origin', cache: 'no-store',
+      headers: body !== undefined ? { 'content-type': 'application/json' } : {},
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new ApiError('ინტერნეტთან კავშირი ვერ მოხერხდა. შეამოწმეთ ინტერნეტი და სცადეთ თავიდან.', 0);
+  }
+  if (r.status === 401) { location.href = '/login'; throw new ApiError('სესია ამოიწურა. შედით თავიდან.', 401); }
+  const data = await r.json().catch(() => null);
+  if (!r.ok) throw new ApiError(data?.error || `შეცდომა (${r.status}). სცადეთ თავიდან.`, r.status);
+  return data;
+}
+
 /* ---------- მონაცემები ---------- */
-let db;
-function seed() {
-  const flowers = DEFAULT_FLOWERS.map(name => ({ id: uid(), name }));
-  const f = name => flowers.find(x => x.name === name);
-  const at = daysAgo => { const d = new Date(); d.setDate(d.getDate() - daysAgo); return toDateInput(d); };
-  const item = (name, qty) => ({ flowerId: f(name).id, name, qty });
-  const orders = [
-    { id: uid(), number: 1001, date: at(1), price: 85, note: 'დაბადების დღისთვის', example: true,
-      items: [item('ვარდი წითელი', 11), item('გიპსოფილა', 2), item('ევკალიფტი', 3)] },
-    { id: uid(), number: 1002, date: at(0), price: 60, note: '', example: true,
-      items: [item('ტულიფანი', 15), item('ევკალიფტი', 2)] },
-    { id: uid(), number: 1003, date: at(0), price: 120, note: 'მიტანით, ვაკე', example: true,
-      items: [item('ვარდი თეთრი', 7), item('ლისიანთუსი', 5), item('ქრიზანთემა', 3), item('გიპსოფილა', 1)] },
-  ];
-  return { flowers, orders };
+const db = { flowers: [], orders: [] };
+const sameId = (a, b) => String(a) === String(b);
+const flowerName = id => db.flowers.find(f => sameId(f.id, id))?.name;
+async function fetchOrders() { db.orders = (await api('orders')).orders; }
+async function fetchFlowers() { db.flowers = (await api('flowers')).flowers; }
+// ხედის გადართვისას ახალი მონაცემები წამოვიღოთ (ფლორისტის შეყვანილი სხვა მოწყობილობიდანაც ჩანს)
+let refreshing = null;
+function refreshOrders(render) {
+  if (!refreshing) refreshing = fetchOrders().finally(() => { refreshing = null; });
+  refreshing.then(render, e => toast(e.message));
 }
-function load() {
-  try { db = JSON.parse(localStorage.getItem(KEY)); } catch { db = null; }
-  if (!db || !Array.isArray(db.orders) || !Array.isArray(db.flowers)) { db = seed(); save(); }
-  db.orders.forEach(o => { delete o.florist; }); // ძველი ველი აღარ გამოიყენება
-}
-function save() { localStorage.setItem(KEY, JSON.stringify(db)); }
-const flowerName = id => db.flowers.find(f => f.id === id)?.name;
 
 /* ---------- ნავიგაცია ---------- */
 function show(view) {
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
   document.body.dataset.view = view;
-  if (view === 'list') renderOrders();
-  if (view === 'summary') renderSummary();
+  if (view === 'list') { renderOrders(); refreshOrders(() => document.body.dataset.view === 'list' && renderOrders()); }
+  if (view === 'summary') { renderSummary(); refreshOrders(() => document.body.dataset.view === 'summary' && renderSummary()); }
   window.scrollTo(0, 0);
 }
 $$('.tab').forEach(t => t.addEventListener('click', () => show(t.dataset.view)));
@@ -55,14 +57,14 @@ $$('.tab').forEach(t => t.addEventListener('click', () => show(t.dataset.view)))
 let toastTimer;
 function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), Math.max(2200, msg.length * 60));
 }
 
 /* ---------- ფორმა ---------- */
 let editingId = null;
 
 function flowerOptions(selected) {
-  const opts = db.flowers.map(f => `<option value="${f.id}"${f.id === selected ? ' selected' : ''}>${esc(f.name)}</option>`);
+  const opts = db.flowers.map(f => `<option value="${f.id}"${sameId(f.id, selected) ? ' selected' : ''}>${esc(f.name)}</option>`);
   return `<option value="">ყვავილი…</option>${opts.join('')}<option value="__new">＋ ახალი ყვავილი…</option>`;
 }
 function addRow(flowerId = '', qty = 1, fallbackName = '') {
@@ -80,11 +82,14 @@ function addRow(flowerId = '', qty = 1, fallbackName = '') {
     </div>
     <button type="button" class="rm" aria-label="წაშლა"><svg class="ic"><use href="#i-x"/></svg></button>`;
   const sel = $('select', row), q = $('input', row);
-  sel.addEventListener('change', () => {
+  sel.addEventListener('change', async () => {
     if (sel.value === '__new') {
       const name = (prompt('ახალი ყვავილის სახელი:') || '').trim();
-      if (name) { const f = addFlower(name); refreshSelects(); sel.value = f.id; }
-      else sel.value = '';
+      sel.value = '';
+      if (name) {
+        try { const f = await addFlower(name); refreshSelects(); sel.value = String(f.id); }
+        catch (e) { toast(e.message); }
+      }
     }
     updateTotal();
   });
@@ -123,7 +128,7 @@ function clearErrors() {
   $('#f-number').classList.remove('invalid');
 }
 function startEdit(id) {
-  const o = db.orders.find(x => x.id === id); if (!o) return;
+  const o = db.orders.find(x => sameId(x.id, id)); if (!o) return;
   show('form');
   editingId = id;
   clearErrors();
@@ -131,6 +136,7 @@ function startEdit(id) {
   $('#btn-save').textContent = 'ცვლილებების შენახვა';
   $('#btn-cancel').hidden = false;
   $('#f-number').value = o.number;
+  editingId = o.id;
   $('#f-date').value = dayOf(o.date);
   $('#f-price').value = o.price ?? '';
   $('#f-note').value = o.note || '';
@@ -140,14 +146,16 @@ function startEdit(id) {
 $('#btn-cancel').onclick = () => { resetForm(); show('list'); };
 $('#btn-add-row').onclick = () => addRow();
 
-$('#order-form').addEventListener('submit', e => {
+let saving = false;
+$('#order-form').addEventListener('submit', async e => {
   e.preventDefault();
+  if (saving) return;
   clearErrors();
   let ok = true;
   const number = parseInt($('#f-number').value, 10);
   if (!number || number < 1) {
     $('#err-number').textContent = 'მიუთითეთ შეკვეთის ნომერი.'; ok = false;
-  } else if (db.orders.some(o => o.number === number && o.id !== editingId)) {
+  } else if (db.orders.some(o => o.number === number && !sameId(o.id, editingId))) {
     $('#err-number').textContent = `№${number} უკვე არსებობს. ჩაწერეთ სხვა ნომერი.`; ok = false;
   }
   if (!ok) $('#f-number').classList.add('invalid');
@@ -155,11 +163,9 @@ $('#order-form').addEventListener('submit', e => {
   // ერთნაირი ყვავილის მწკრივები გავაერთიანოთ
   const map = new Map();
   $$('#rows .row').forEach(r => {
-    const sel = $('select', r), id = sel.value, qty = parseInt($('input', r).value, 10) || 0;
+    const id = $('select', r).value, qty = parseInt($('input', r).value, 10) || 0;
     if (!id || qty < 1) return;
-    const name = flowerName(id) || sel.selectedOptions[0]?.dataset.name || sel.selectedOptions[0]?.textContent;
-    const cur = map.get(id);
-    map.set(id, { flowerId: id, name, qty: (cur?.qty || 0) + qty });
+    map.set(id, { flowerId: Number(id), qty: (map.get(id)?.qty || 0) + qty });
   });
   const items = [...map.values()];
   if (!items.length) { $('#err-rows').textContent = 'დაამატეთ ერთი ყვავილი მაინც.'; ok = false; }
@@ -173,25 +179,41 @@ $('#order-form').addEventListener('submit', e => {
     note: $('#f-note').value.trim(),
     items,
   };
-  if (editingId) {
-    const o = db.orders.find(x => x.id === editingId);
-    Object.assign(o, data);
-    toast(`შეკვეთა №${number} განახლდა.`);
-  } else {
-    db.orders.push({ id: uid(), example: false, ...data });
-    toast(`შეკვეთა №${number} შენახულია.`);
+  const btn = $('#btn-save'), label = btn.textContent, wasEdit = editingId != null;
+  saving = true; btn.disabled = true; btn.textContent = 'ინახება…';
+  try {
+    if (wasEdit) {
+      const { order } = await api(`orders/${editingId}`, { method: 'PUT', body: data });
+      db.orders = db.orders.map(o => sameId(o.id, order.id) ? order : o);
+      toast(`შეკვეთა №${number} განახლდა.`);
+    } else {
+      const { order } = await api('orders', { method: 'POST', body: data });
+      db.orders.push(order);
+      toast(`შეკვეთა №${number} შენახულია.`);
+    }
+  } catch (err) {
+    saving = false; btn.disabled = false; btn.textContent = label;
+    if (err.status === 409) {
+      $('#err-number').textContent = err.message; $('#f-number').classList.add('invalid');
+      $('#f-number').scrollIntoView({ block: 'center', behavior: 'smooth' });
+      fetchOrders().catch(() => {});
+    } else if (err.status === 404) {
+      toast(err.message); fetchOrders().catch(() => {}); resetForm(); show('list');
+    } else toast(err.message);
+    return;
   }
-  save();
-  const wasEdit = !!editingId;
+  saving = false; btn.disabled = false;
   resetForm();
   if (wasEdit) show('list');
 });
 
 /* ---------- ყვავილების სია ---------- */
-function addFlower(name) {
+async function addFlower(name) {
   const existing = db.flowers.find(f => f.name.toLowerCase() === name.toLowerCase());
   if (existing) return existing;
-  const f = { id: uid(), name }; db.flowers.push(f); save(); return f;
+  const { flower } = await api('flowers', { method: 'POST', body: { name } });
+  if (!db.flowers.some(f => sameId(f.id, flower.id))) db.flowers.push(flower);
+  return flower;
 }
 function renderFlowerList() {
   $('#flower-list').innerHTML = db.flowers.map(f => `
@@ -201,24 +223,36 @@ function renderFlowerList() {
     </li>`).join('') || '<li class="meta">სია ცარიელია.</li>';
   $$('#flower-list li[data-id]').forEach(li => {
     const id = li.dataset.id;
-    $('input', li).addEventListener('change', e => {
-      const name = e.target.value.trim(); const f = db.flowers.find(x => x.id === id);
-      if (!name) { e.target.value = f.name; return; }
-      f.name = name;
-      db.orders.forEach(o => o.items.forEach(it => { if (it.flowerId === id) it.name = name; }));
-      save(); refreshSelects();
+    $('input', li).addEventListener('change', async e => {
+      const inp = e.target, name = inp.value.trim(), f = db.flowers.find(x => sameId(x.id, id));
+      if (!f) return;
+      if (!name || name === f.name) { inp.value = f.name; return; }
+      inp.disabled = true;
+      try {
+        await api(`flowers/${id}`, { method: 'PUT', body: { name } });
+        f.name = name;
+        db.orders.forEach(o => o.items.forEach(it => { if (sameId(it.flowerId, id)) it.name = name; }));
+        refreshSelects(); toast('სახელი შეიცვალა.');
+      } catch (err) { inp.value = f.name; toast(err.message); }
+      inp.disabled = false;
     });
-    $('.rm', li).onclick = () => {
-      const f = db.flowers.find(x => x.id === id);
-      if (!confirm(`წაიშალოს „${f.name}“ სიიდან? ძველ შეკვეთებში ეს სახელი შენარჩუნდება.`)) return;
-      db.flowers = db.flowers.filter(x => x.id !== id); save(); renderFlowerList(); refreshSelects();
+    $('.rm', li).onclick = async () => {
+      const f = db.flowers.find(x => sameId(x.id, id));
+      if (!f || !confirm(`წაიშალოს „${f.name}“ სიიდან? ძველ შეკვეთებში ეს სახელი შენარჩუნდება.`)) return;
+      try {
+        await api(`flowers/${id}`, { method: 'DELETE' });
+        db.flowers = db.flowers.filter(x => !sameId(x.id, id)); renderFlowerList(); refreshSelects();
+      } catch (err) { toast(err.message); }
     };
   });
 }
 $('#btn-flowers').onclick = () => { renderFlowerList(); $('#dlg-flowers').showModal(); };
-$('#btn-new-flower').onclick = () => {
-  const inp = $('#new-flower'), name = inp.value.trim(); if (!name) return;
-  addFlower(name); inp.value = ''; renderFlowerList(); refreshSelects();
+$('#btn-new-flower').onclick = async () => {
+  const inp = $('#new-flower'), btn = $('#btn-new-flower'), name = inp.value.trim(); if (!name) return;
+  btn.disabled = true;
+  try { await addFlower(name); inp.value = ''; renderFlowerList(); refreshSelects(); }
+  catch (err) { toast(err.message); }
+  btn.disabled = false;
 };
 $('#new-flower').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#btn-new-flower').click(); } });
 
@@ -238,7 +272,7 @@ function renderOrders() {
     return `
     <article class="card order">
       <div class="card-h">
-        <div class="num">№${o.number}${o.example ? '<span class="badge">მაგალითი</span>' : ''}</div>
+        <div class="num">№${o.number}</div>
         ${o.price != null && o.price !== '' ? `<div class="price">${money(o.price)}</div>` : ''}
       </div>
       <div class="meta">
@@ -254,11 +288,18 @@ function renderOrders() {
     </article>`;
   }).join('');
   $$('[data-edit]').forEach(b => b.onclick = () => startEdit(b.dataset.edit));
-  $$('[data-del]').forEach(b => b.onclick = () => {
-    const o = db.orders.find(x => x.id === b.dataset.del);
-    if (!confirm(`წაიშალოს შეკვეთა №${o.number}? ამ მოქმედებას ვეღარ გააუქმებთ.`)) return;
-    db.orders = db.orders.filter(x => x.id !== o.id); save(); renderOrders();
-    if (editingId === o.id) resetForm();
+  $$('[data-del]').forEach(b => b.onclick = async () => {
+    const o = db.orders.find(x => sameId(x.id, b.dataset.del));
+    if (!o || !confirm(`წაიშალოს შეკვეთა №${o.number}? ამ მოქმედებას ვეღარ გააუქმებთ.`)) return;
+    b.disabled = true;
+    try {
+      await api(`orders/${o.id}`, { method: 'DELETE' });
+    } catch (err) {
+      b.disabled = false;
+      if (err.status !== 404) { toast(err.message); return; }
+    }
+    db.orders = db.orders.filter(x => !sameId(x.id, o.id)); renderOrders();
+    if (sameId(editingId, o.id)) resetForm();
     toast(`შეკვეთა №${o.number} წაიშალა.`);
   });
 }
@@ -320,13 +361,14 @@ $$('.chip').forEach(c => c.addEventListener('click', () => {
 
 /* ---------- CSV ---------- */
 $('#btn-csv').onclick = () => {
-  const head = ['შეკვეთის ნომერი', 'თარიღი', 'ყვავილი', 'რაოდენობა', 'ფასი (₾)', 'შენიშვნა', 'მაგალითი'];
+  if (!db.orders.length) { toast('ჩამოსატვირთი შეკვეთა ჯერ არ არის.'); return; }
+  const head = ['შეკვეთის ნომერი', 'თარიღი', 'ყვავილი', 'რაოდენობა', 'ფასი (₾)', 'შენიშვნა'];
   const cell = v => { const s = String(v ?? ''); return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   const lines = [head.map(cell).join(',')];
   [...db.orders].sort((a, b) => a.number - b.number).forEach(o => {
     o.items.forEach((i, idx) => lines.push([
       o.number, dayOf(o.date),
-      flowerName(i.flowerId) || i.name, i.qty, idx === 0 ? (o.price ?? '') : '', idx === 0 ? o.note : '', o.example ? 'კი' : '',
+      flowerName(i.flowerId) || i.name, i.qty, idx === 0 ? (o.price ?? '') : '', idx === 0 ? o.note : '',
     ].map(cell).join(',')));
   });
   const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
@@ -337,14 +379,35 @@ $('#btn-csv').onclick = () => {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
 
-/* ---------- თავიდან ჩატვირთვა ---------- */
-$('#btn-reset').onclick = () => {
-  if (!confirm('წაიშალოს ყველა მონაცემი და ჩაიტვირთოს მაგალითები?')) return;
-  db = seed(); save(); resetForm(); show('form'); toast('მაგალითები ჩაიტვირთა.');
+/* ---------- გასვლა ---------- */
+$('#btn-logout').onclick = async () => {
+  if (!confirm('გამოხვიდეთ ანგარიშიდან?')) return;
+  try { await fetch('/api/logout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}', credentials: 'same-origin' }); } catch {}
+  location.replace('/login');
 };
 
-load();
-resetForm();
-document.body.dataset.view = 'form';
+/* ---------- ჩატვირთვა ---------- */
 { const d = new Date(), DAYS = ['კვირა', 'ორშაბათი', 'სამშაბათი', 'ოთხშაბათი', 'ხუთშაბათი', 'პარასკევი', 'შაბათი'];
   $('#today-line').textContent = `${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`; }
+document.body.dataset.view = 'form';
+
+async function boot() {
+  $('#boot').hidden = false; $('#boot-load').hidden = false; $('#boot-err').hidden = true;
+  try {
+    await Promise.all([fetchFlowers(), fetchOrders()]);
+  } catch (e) {
+    if (e.status === 401) return;
+    $('#boot-load').hidden = true; $('#boot-err').hidden = false; $('#boot-msg').textContent = e.message;
+    return;
+  }
+  resetForm();
+  $('#boot').hidden = true;
+}
+$('#btn-retry').onclick = boot;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !$('#boot').hidden) return;
+  const v = document.body.dataset.view;
+  if (v === 'list' || v === 'summary') refreshOrders(() => v === 'list' ? renderOrders() : renderSummary());
+  else fetchOrders().catch(() => {});
+});
+boot();

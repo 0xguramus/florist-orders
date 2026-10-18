@@ -8,12 +8,13 @@
 <meta name="color-scheme" content="light dark">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E🌷%3C/text%3E%3C/svg%3E">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>შეკვეთების ჟურნალი</title>
-<link rel="preload" href="fonts/FiraGO-Regular.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="fonts/FiraGO-SemiBold.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="preload" href="/fonts/FiraGO-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/FiraGO-SemiBold.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/style.css?v=5">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -30,6 +31,7 @@
   <symbol id="i-tune" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
   <symbol id="i-note" viewBox="0 0 24 24"><path d="M5 4h10l4 4v12H5z"/><path d="M9 12h6M9 16h4"/></symbol>
   <symbol id="i-cal" viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="14" rx="2.5"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
 </svg>
 
@@ -40,6 +42,7 @@
       <h1>შეკვეთების ჟურნალი</h1>
       <p class="sub" id="today-line">ყვავილების მაღაზია</p>
     </div>
+    <button class="icon-btn logout" id="btn-logout" aria-label="გასვლა" title="გასვლა"><svg class="ic"><use href="#i-logout"/></svg></button>
   </div>
 </header>
 
@@ -119,9 +122,7 @@
     <div id="summary"></div>
   </section>
 
-  <footer class="foot">მაგალითია, მონაცემები ამ მოწყობილობაში ინახება.<br>
-    <button class="link" id="btn-reset">მაგალითების თავიდან ჩატვირთვა</button>
-  </footer>
+  <footer class="foot">მონაცემები დაცულ საერთო ბაზაში ინახება.</footer>
 </main>
 
 <nav class="tabbar" aria-label="ნავიგაცია">
@@ -146,7 +147,17 @@
   </form>
 </dialog>
 
+<div id="boot" class="boot" aria-live="polite">
+  <div id="boot-load" class="boot-in"><div class="spinner" aria-hidden="true"></div><p>იტვირთება…</p></div>
+  <div id="boot-err" class="boot-in" hidden>
+    <div class="empty-ic" aria-hidden="true">⚠️</div>
+    <p class="boot-title">მონაცემები ვერ ჩაიტვირთა</p>
+    <p class="boot-msg" id="boot-msg"></p>
+    <button class="btn primary" id="btn-retry">თავიდან ცდა</button>
+  </div>
+</div>
+
 <div id="toast" role="status"></div>
-<script src="app.js?v=4"></script>
+<script src="/app.js?v=5"></script>
 </body>
 </html>
