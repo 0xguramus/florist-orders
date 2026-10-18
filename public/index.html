@@ -14,7 +14,7 @@
 <title>შეკვეთების ჟურნალი</title>
 <link rel="preload" href="/fonts/FiraGO-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/FiraGO-SemiBold.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/style.css?v=6">
+<link rel="stylesheet" href="/style.css?v=7">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -48,8 +48,8 @@
 </header>
 
 <main>
-  <!-- ფორმა -->
-  <section id="view-form" class="view active">
+  <!-- შეკვეთები: ფორმა + ისტორია -->
+  <section id="view-orders" class="view active">
     <form id="order-form" autocomplete="off" novalidate>
       <h2 id="form-title">ახალი შეკვეთა</h2>
 
@@ -90,11 +90,8 @@
         <button type="submit" class="btn primary full" id="btn-save">შენახვა</button>
       </div>
     </form>
-  </section>
 
-  <!-- სია -->
-  <section id="view-list" class="view">
-    <h2>შეკვეთები</h2>
+    <h3 class="sec-h">შეკვეთების ისტორია</h3>
     <div class="list-tools">
       <div class="search">
         <svg class="ic"><use href="#i-search"/></svg>
@@ -170,8 +167,7 @@
 </main>
 
 <nav class="tabbar" aria-label="ნავიგაცია">
-  <button class="tab active" data-view="form"><svg class="ic"><use href="#i-new"/></svg><span>ახალი შეკვეთა</span></button>
-  <button class="tab" data-view="list"><svg class="ic"><use href="#i-list"/></svg><span>შეკვეთები</span></button>
+  <button class="tab active" data-view="orders"><svg class="ic"><use href="#i-list"/></svg><span>შეკვეთები</span></button>
   <button class="tab" data-view="writeoff"><svg class="ic"><use href="#i-waste"/></svg><span>ჩამოწერა</span></button>
   <button class="tab" data-view="summary"><svg class="ic"><use href="#i-chart"/></svg><span>შეჯამება</span></button>
 </nav>
@@ -203,6 +199,6 @@
 </div>
 
 <div id="toast" role="status"></div>
-<script src="/app.js?v=6"></script>
+<script src="/app.js?v=7"></script>
 </body>
 </html>

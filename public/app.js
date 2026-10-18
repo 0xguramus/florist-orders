@@ -54,7 +54,7 @@ function show(view) {
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
   document.body.dataset.view = view;
-  if (view === 'list') { renderOrders(); refreshOrders(() => document.body.dataset.view === 'list' && renderOrders()); }
+  if (view === 'orders') { renderOrders(); refreshOrders(() => document.body.dataset.view === 'orders' && renderOrders()); }
   if (view === 'writeoff') { renderWriteOffs(); refreshWriteOffs(() => document.body.dataset.view === 'writeoff' && renderWriteOffs()); }
   if (view === 'summary') {
     renderSummary();
@@ -158,7 +158,7 @@ function clearErrors() {
 }
 function startEdit(id) {
   const o = db.orders.find(x => sameId(x.id, id)); if (!o) return;
-  show('form');
+  window.scrollTo({ top: 0, behavior: 'smooth' }); // ფორმა იმავე გვერდზე, ზემოთაა
   editingId = id;
   clearErrors();
   $('#form-title').textContent = `შეკვეთის რედაქტირება (№${o.number})`;
@@ -171,8 +171,17 @@ function startEdit(id) {
   $('#f-note').value = o.note || '';
   $('#rows').innerHTML = '';
   o.items.forEach(it => addRow(it.flowerId, it.qty, it.name));
+  markEditing();
 }
-$('#btn-cancel').onclick = () => { resetForm(); show('list'); };
+// რედაქტირებადი ბარათი ისტორიაში გამოვყოთ
+function markEditing() {
+  $$('#orders .order').forEach(c => c.classList.toggle('editing', sameId(c.dataset.id, editingId)));
+}
+function scrollToOrder(id) {
+  const c = $(`#orders .order[data-id="${id}"]`);
+  if (c) c.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+$('#btn-cancel').onclick = () => { const id = editingId; resetForm(); markEditing(); scrollToOrder(id); };
 $('#btn-add-row').onclick = () => addRow();
 
 let saving = false;
@@ -221,13 +230,15 @@ $('#order-form').addEventListener('submit', async e => {
       $('#f-number').scrollIntoView({ block: 'center', behavior: 'smooth' });
       fetchOrders().catch(() => {});
     } else if (err.status === 404) {
-      toast(err.message); fetchOrders().catch(() => {}); resetForm(); show('list');
+      toast(err.message); resetForm(); refreshOrders(renderOrders);
     } else toast(err.message);
     return;
   }
   saving = false; btn.disabled = false;
+  const savedId = editingId;
   resetForm();
-  if (wasEdit) show('list');
+  renderOrders();
+  if (wasEdit) scrollToOrder(savedId);
 });
 
 /* ---------- ყვავილების სია ---------- */
@@ -293,7 +304,7 @@ function renderOrders() {
   $('#orders').innerHTML = list.map(o => {
     const stems = o.items.reduce((s, i) => s + i.qty, 0);
     return `
-    <article class="card order">
+    <article class="card order" data-id="${o.id}">
       <div class="card-h">
         <div class="num">№${o.number}</div>
         ${o.price != null && o.price !== '' ? `<div class="price">${money(o.price)}</div>` : ''}
@@ -321,10 +332,11 @@ function renderOrders() {
       b.disabled = false;
       if (err.status !== 404) { toast(err.message); return; }
     }
-    db.orders = db.orders.filter(x => !sameId(x.id, o.id)); renderOrders();
     if (sameId(editingId, o.id)) resetForm();
+    db.orders = db.orders.filter(x => !sameId(x.id, o.id)); renderOrders();
     toast(`შეკვეთა №${o.number} წაიშალა.`);
   });
+  markEditing();
 }
 $('#search').addEventListener('input', renderOrders);
 
@@ -500,7 +512,7 @@ $('#btn-logout').onclick = async () => {
 /* ---------- ჩატვირთვა ---------- */
 { const d = new Date(), DAYS = ['კვირა', 'ორშაბათი', 'სამშაბათი', 'ოთხშაბათი', 'ხუთშაბათი', 'პარასკევი', 'შაბათი'];
   $('#today-line').textContent = `${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`; }
-document.body.dataset.view = 'form';
+document.body.dataset.view = 'orders';
 
 let booted = false;
 async function boot() {
@@ -509,7 +521,7 @@ async function boot() {
   const timeout = new Promise((_, rej) => setTimeout(() => rej(new ApiError('სერვერი დიდხანს არ პასუხობს. სცადეთ თავიდან.', 0)), 20000));
   try {
     await Promise.race([Promise.all([fetchFlowers(), fetchOrders(), fetchWriteOffs()]), timeout]);
-    resetForm(); resetWoForm();
+    resetForm(); resetWoForm(); renderOrders();
   } catch (e) {
     if (e.status === 401) return; // გადამისამართება შესვლის გვერდზე
     $('#boot-load').hidden = true; $('#boot-err').hidden = false; $('#boot-msg').textContent = e.message;
@@ -523,10 +535,9 @@ $('#btn-retry').onclick = boot;
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible' || !booted) return;
   const v = document.body.dataset.view;
-  if (v === 'list') refreshOrders(renderOrders);
+  if (v === 'orders') refreshOrders(renderOrders);
   else if (v === 'writeoff') refreshWriteOffs(renderWriteOffs);
   else if (v === 'summary') { refreshOrders(renderSummary); refreshWriteOffs(renderSummary); }
-  else fetchOrders().catch(() => {});
 });
 // iOS Safari-ში „უკან“ ღილაკით (bfcache) დაბრუნებისას მონაცემები განვაახლოთ
 window.addEventListener('pageshow', e => { if (e.persisted && !booted) location.reload(); });
