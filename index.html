@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ka">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f6b4f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>შეკვეთების ჟურნალი</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>🌷 შეკვეთების ჟურნალი</h1>
+  <nav class="tabs">
+    <button class="tab active" data-view="form">ახალი შეკვეთა</button>
+    <button class="tab" data-view="list">შეკვეთები</button>
+    <button class="tab" data-view="summary">შეჯამება</button>
+  </nav>
+</header>
+
+<main>
+  <!-- ფორმა -->
+  <section id="view-form" class="view active">
+    <form id="order-form" autocomplete="off" novalidate>
+      <h2 id="form-title">ახალი შეკვეთა</h2>
+      <div class="grid2 nd">
+        <label>შეკვეთის ნომერი
+          <input id="f-number" type="number" inputmode="numeric" min="1" required>
+          <small class="err" id="err-number"></small>
+        </label>
+        <label>თარიღი და დრო
+          <input id="f-date" type="datetime-local" required>
+        </label>
+      </div>
+      <label>ფლორისტი <span class="opt">(არასავალდებულო)</span>
+        <input id="f-florist" type="text" list="florist-names" placeholder="მაგ., ნინო">
+        <datalist id="florist-names"></datalist>
+      </label>
+
+      <div class="rows-head">
+        <span>თაიგულის შემადგენლობა</span>
+        <button type="button" class="link" id="btn-flowers">სიის რედაქტირება</button>
+      </div>
+      <div id="rows"></div>
+      <small class="err" id="err-rows"></small>
+      <button type="button" class="btn ghost full" id="btn-add-row">＋ ყვავილის დამატება</button>
+      <p class="total-line" id="total-line"></p>
+
+      <div class="grid2">
+        <label>გაყიდვის ფასი, ₾ <span class="opt">(არასავალდებულო)</span>
+          <input id="f-price" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+        </label>
+        <label>შენიშვნა <span class="opt">(არასავალდებულო)</span>
+          <input id="f-note" type="text" placeholder="მაგ., მიტანით">
+        </label>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="btn ghost" id="btn-cancel" hidden>გაუქმება</button>
+        <button type="submit" class="btn primary full" id="btn-save">შენახვა</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- სია -->
+  <section id="view-list" class="view">
+    <div class="list-tools">
+      <input id="search" type="search" inputmode="numeric" placeholder="🔍 ძებნა ნომრით">
+      <button class="btn ghost" id="btn-csv">⬇ CSV</button>
+    </div>
+    <div id="orders"></div>
+  </section>
+
+  <!-- შეჯამება -->
+  <section id="view-summary" class="view">
+    <div class="range">
+      <div class="chips">
+        <button class="chip active" data-range="today">დღეს</button>
+        <button class="chip" data-range="week">ბოლო 7 დღე</button>
+        <button class="chip" data-range="month">ეს თვე</button>
+        <button class="chip" data-range="custom">პერიოდი</button>
+      </div>
+      <div class="grid2" id="custom-range" hidden>
+        <label>საწყისი თარიღი<input id="r-from" type="date"></label>
+        <label>საბოლოო თარიღი<input id="r-to" type="date"></label>
+      </div>
+    </div>
+    <div id="summary"></div>
+  </section>
+</main>
+
+<footer class="foot">მაგალითია, მონაცემები ამ მოწყობილობაში ინახება.
+  <button class="link" id="btn-reset">მაგალითების თავიდან ჩატვირთვა</button>
+</footer>
+
+<!-- ყვავილების სია -->
+<dialog id="dlg-flowers">
+  <form method="dialog" class="dlg">
+    <h3>ყვავილების სია</h3>
+    <ul id="flower-list"></ul>
+    <div class="add-flower">
+      <input id="new-flower" type="text" placeholder="ახალი ყვავილი">
+      <button type="button" class="btn primary" id="btn-new-flower">დამატება</button>
+    </div>
+    <button class="btn ghost full" value="close">დახურვა</button>
+  </form>
+</dialog>
+
+<div id="toast" role="status"></div>
+<script src="app.js"></script>
+</body>
+</html>
