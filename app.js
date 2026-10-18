@@ -8,10 +8,12 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pad = n => String(n).padStart(2, '0');
-const toLocalInput = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const toDateInput = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const MONTHS = ['იანვარი', 'თებერვალი', 'მარტი', 'აპრილი', 'მაისი', 'ივნისი', 'ივლისი', 'აგვისტო', 'სექტემბერი', 'ოქტომბერი', 'ნოემბერი', 'დეკემბერი'];
-const fmtDate = iso => { const d = new Date(iso); return `${d.getDate()} ${MONTHS[d.getMonth()]}, ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+// Dates are stored as 'YYYY-MM-DD'; older records may hold a full ISO datetime — use its local date part.
+const dayOf = v => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? v : toDateInput(new Date(v));
+const dayDate = v => new Date(dayOf(v) + 'T00:00');
+const fmtDate = v => { const d = dayDate(v); return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
 const money = v => (v == null || v === '') ? '' : Number(v).toFixed(2) + ' ₾';
 
 /* ---------- მონაცემები ---------- */
@@ -19,14 +21,14 @@ let db;
 function seed() {
   const flowers = DEFAULT_FLOWERS.map(name => ({ id: uid(), name }));
   const f = name => flowers.find(x => x.name === name);
-  const at = (daysAgo, h, m) => { const d = new Date(); d.setDate(d.getDate() - daysAgo); d.setHours(h, m, 0, 0); return d.toISOString(); };
+  const at = daysAgo => { const d = new Date(); d.setDate(d.getDate() - daysAgo); return toDateInput(d); };
   const item = (name, qty) => ({ flowerId: f(name).id, name, qty });
   const orders = [
-    { id: uid(), number: 1001, date: at(1, 17, 40), price: 85, note: 'დაბადების დღისთვის', example: true,
+    { id: uid(), number: 1001, date: at(1), price: 85, note: 'დაბადების დღისთვის', example: true,
       items: [item('ვარდი წითელი', 11), item('გიპსოფილა', 2), item('ევკალიფტი', 3)] },
-    { id: uid(), number: 1002, date: at(0, 11, 15), price: 60, note: '', example: true,
+    { id: uid(), number: 1002, date: at(0), price: 60, note: '', example: true,
       items: [item('ტულიფანი', 15), item('ევკალიფტი', 2)] },
-    { id: uid(), number: 1003, date: at(0, 13, 5), price: 120, note: 'მიტანით, ვაკე', example: true,
+    { id: uid(), number: 1003, date: at(0), price: 120, note: 'მიტანით, ვაკე', example: true,
       items: [item('ვარდი თეთრი', 7), item('ლისიანთუსი', 5), item('ქრიზანთემა', 3), item('გიპსოფილა', 1)] },
   ];
   return { flowers, orders };
@@ -111,7 +113,7 @@ function resetForm() {
   $('#btn-save').textContent = 'შენახვა';
   $('#btn-cancel').hidden = true;
   $('#f-number').value = '';
-  $('#f-date').value = toLocalInput(new Date());
+  $('#f-date').value = toDateInput(new Date());
   $('#rows').innerHTML = '';
   clearErrors();
   addRow();
@@ -129,7 +131,7 @@ function startEdit(id) {
   $('#btn-save').textContent = 'ცვლილებების შენახვა';
   $('#btn-cancel').hidden = false;
   $('#f-number').value = o.number;
-  $('#f-date').value = toLocalInput(new Date(o.date));
+  $('#f-date').value = dayOf(o.date);
   $('#f-price').value = o.price ?? '';
   $('#f-note').value = o.note || '';
   $('#rows').innerHTML = '';
@@ -166,7 +168,7 @@ $('#order-form').addEventListener('submit', e => {
   const priceRaw = $('#f-price').value;
   const data = {
     number,
-    date: new Date($('#f-date').value || Date.now()).toISOString(),
+    date: $('#f-date').value || toDateInput(new Date()),
     price: priceRaw === '' ? null : Math.round(parseFloat(priceRaw) * 100) / 100,
     note: $('#f-note').value.trim(),
     items,
@@ -226,7 +228,7 @@ function renderOrders() {
   const q = $('#search').value.trim();
   const list = db.orders
     .filter(o => !q || String(o.number).includes(q))
-    .sort((a, b) => new Date(b.date) - new Date(a.date) || b.number - a.number);
+    .sort((a, b) => dayOf(b.date).localeCompare(dayOf(a.date)) || b.number - a.number);
   if (!list.length) {
     $('#orders').innerHTML = empty(q ? '🔍' : '💐', q ? 'ამ ნომრით შეკვეთა ვერ მოიძებნა.' : 'შეკვეთები ჯერ არ არის.');
     return;
@@ -240,7 +242,7 @@ function renderOrders() {
         ${o.price != null && o.price !== '' ? `<div class="price">${money(o.price)}</div>` : ''}
       </div>
       <div class="meta">
-        <span><svg class="ic"><use href="#i-clock"/></svg>${fmtDate(o.date)}</span>
+        <span><svg class="ic"><use href="#i-cal"/></svg>${fmtDate(o.date)}</span>
         <span class="stems">${stems} ღერო</span>
       </div>
       <ul class="items">${o.items.map(i => `<li>${esc(i.name)}<b>${i.qty}</b></li>`).join('')}</ul>
@@ -280,7 +282,7 @@ function rangeBounds() {
 function renderSummary() {
   $('#custom-range').hidden = range !== 'custom';
   const [s, e] = rangeBounds();
-  const orders = db.orders.filter(o => { const d = new Date(o.date); return d >= s && d < e; });
+  const orders = db.orders.filter(o => { const d = dayDate(o.date); return d >= s && d < e; });
   if (!orders.length) { $('#summary').innerHTML = empty('🌱', 'ამ პერიოდში შეკვეთა არ არის.'); return; }
   const totals = new Map();
   orders.forEach(o => o.items.forEach(i => {
@@ -318,13 +320,12 @@ $$('.chip').forEach(c => c.addEventListener('click', () => {
 
 /* ---------- CSV ---------- */
 $('#btn-csv').onclick = () => {
-  const head = ['შეკვეთის ნომერი', 'თარიღი', 'დრო', 'ყვავილი', 'რაოდენობა', 'ფასი (₾)', 'შენიშვნა', 'მაგალითი'];
+  const head = ['შეკვეთის ნომერი', 'თარიღი', 'ყვავილი', 'რაოდენობა', 'ფასი (₾)', 'შენიშვნა', 'მაგალითი'];
   const cell = v => { const s = String(v ?? ''); return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   const lines = [head.map(cell).join(',')];
   [...db.orders].sort((a, b) => a.number - b.number).forEach(o => {
-    const d = new Date(o.date);
     o.items.forEach((i, idx) => lines.push([
-      o.number, toDateInput(d), `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+      o.number, dayOf(o.date),
       flowerName(i.flowerId) || i.name, i.qty, idx === 0 ? (o.price ?? '') : '', idx === 0 ? o.note : '', o.example ? 'კი' : '',
     ].map(cell).join(',')));
   });
