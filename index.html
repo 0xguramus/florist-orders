@@ -3,19 +3,45 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#2f6b4f">
+<meta name="theme-color" content="#f4f2ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121614" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E🌷%3C/text%3E%3C/svg%3E">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>შეკვეთების ჟურნალი</title>
-<link rel="stylesheet" href="style.css">
+<link rel="preload" href="fonts/FiraGO-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/FiraGO-SemiBold.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-new" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="5"/><path d="M12 8.5v7M8.5 12h7"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20h16"/><rect x="5.5" y="11" width="3" height="6" rx="1"/><rect x="10.5" y="6" width="3" height="11" rx="1"/><rect x="15.5" y="13" width="3" height="4" rx="1"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></symbol>
+  <symbol id="i-tune" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M5 4h10l4 4v12H5z"/><path d="M9 12h6M9 16h4"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+</svg>
+
 <header class="top">
-  <h1>🌷 შეკვეთების ჟურნალი</h1>
-  <nav class="tabs">
-    <button class="tab active" data-view="form">ახალი შეკვეთა</button>
-    <button class="tab" data-view="list">შეკვეთები</button>
-    <button class="tab" data-view="summary">შეჯამება</button>
-  </nav>
+  <div class="brand">
+    <span class="logo" aria-hidden="true">🌷</span>
+    <div>
+      <h1>შეკვეთების ჟურნალი</h1>
+      <p class="sub" id="today-line">ყვავილების მაღაზია</p>
+    </div>
+  </div>
 </header>
 
 <main>
@@ -23,34 +49,39 @@
   <section id="view-form" class="view active">
     <form id="order-form" autocomplete="off" novalidate>
       <h2 id="form-title">ახალი შეკვეთა</h2>
-      <div class="grid2 nd">
-        <label>შეკვეთის ნომერი
-          <input id="f-number" type="number" inputmode="numeric" min="1" required>
-          <small class="err" id="err-number"></small>
-        </label>
-        <label>თარიღი და დრო
-          <input id="f-date" type="datetime-local" required>
+
+      <div class="card">
+        <div class="grid2 nd">
+          <label>შეკვეთის ნომერი
+            <span class="num-wrap"><span class="num-prefix">№</span><input id="f-number" type="number" inputmode="numeric" min="1" required></span>
+            <small class="err" id="err-number"></small>
+          </label>
+          <label>თარიღი და დრო
+            <input id="f-date" type="datetime-local" required>
+          </label>
+        </div>
+        <label class="last">ფლორისტი <span class="opt">არასავალდებულო</span>
+          <input id="f-florist" type="text" list="florist-names" placeholder="მაგ., ნინო">
+          <datalist id="florist-names"></datalist>
         </label>
       </div>
-      <label>ფლორისტი <span class="opt">(არასავალდებულო)</span>
-        <input id="f-florist" type="text" list="florist-names" placeholder="მაგ., ნინო">
-        <datalist id="florist-names"></datalist>
-      </label>
 
-      <div class="rows-head">
-        <span>თაიგულის შემადგენლობა</span>
-        <button type="button" class="link" id="btn-flowers">სიის რედაქტირება</button>
+      <div class="card">
+        <div class="rows-head">
+          <span class="sec-title">თაიგულის შემადგენლობა</span>
+          <button type="button" class="link" id="btn-flowers"><svg class="ic"><use href="#i-tune"/></svg>სია</button>
+        </div>
+        <div id="rows"></div>
+        <small class="err" id="err-rows"></small>
+        <button type="button" class="btn dashed full" id="btn-add-row"><svg class="ic"><use href="#i-plus"/></svg>ყვავილის დამატება</button>
+        <p class="total-line" id="total-line"></p>
       </div>
-      <div id="rows"></div>
-      <small class="err" id="err-rows"></small>
-      <button type="button" class="btn ghost full" id="btn-add-row">＋ ყვავილის დამატება</button>
-      <p class="total-line" id="total-line"></p>
 
-      <div class="grid2">
-        <label>გაყიდვის ფასი, ₾ <span class="opt">(არასავალდებულო)</span>
+      <div class="card">
+        <label>გაყიდვის ფასი, ₾ <span class="opt">არასავალდებულო</span>
           <input id="f-price" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
         </label>
-        <label>შენიშვნა <span class="opt">(არასავალდებულო)</span>
+        <label class="last">შენიშვნა <span class="opt">არასავალდებულო</span>
           <input id="f-note" type="text" placeholder="მაგ., მიტანით">
         </label>
       </div>
@@ -64,49 +95,63 @@
 
   <!-- სია -->
   <section id="view-list" class="view">
+    <h2>შეკვეთები</h2>
     <div class="list-tools">
-      <input id="search" type="search" inputmode="numeric" placeholder="🔍 ძებნა ნომრით">
-      <button class="btn ghost" id="btn-csv">⬇ CSV</button>
+      <div class="search">
+        <svg class="ic"><use href="#i-search"/></svg>
+        <input id="search" type="search" inputmode="numeric" placeholder="ძებნა ნომრით">
+      </div>
+      <button class="btn ghost" id="btn-csv"><svg class="ic"><use href="#i-download"/></svg>CSV</button>
     </div>
     <div id="orders"></div>
   </section>
 
   <!-- შეჯამება -->
   <section id="view-summary" class="view">
+    <h2>შეჯამება</h2>
     <div class="range">
-      <div class="chips">
+      <div class="chips" role="tablist">
         <button class="chip active" data-range="today">დღეს</button>
         <button class="chip" data-range="week">ბოლო 7 დღე</button>
         <button class="chip" data-range="month">ეს თვე</button>
         <button class="chip" data-range="custom">პერიოდი</button>
       </div>
-      <div class="grid2" id="custom-range" hidden>
+      <div class="grid2 card" id="custom-range" hidden>
         <label>საწყისი თარიღი<input id="r-from" type="date"></label>
         <label>საბოლოო თარიღი<input id="r-to" type="date"></label>
       </div>
     </div>
     <div id="summary"></div>
   </section>
+
+  <footer class="foot">მაგალითია, მონაცემები ამ მოწყობილობაში ინახება.<br>
+    <button class="link" id="btn-reset">მაგალითების თავიდან ჩატვირთვა</button>
+  </footer>
 </main>
 
-<footer class="foot">მაგალითია, მონაცემები ამ მოწყობილობაში ინახება.
-  <button class="link" id="btn-reset">მაგალითების თავიდან ჩატვირთვა</button>
-</footer>
+<nav class="tabbar" aria-label="ნავიგაცია">
+  <button class="tab active" data-view="form"><svg class="ic"><use href="#i-new"/></svg><span>ახალი შეკვეთა</span></button>
+  <button class="tab" data-view="list"><svg class="ic"><use href="#i-list"/></svg><span>შეკვეთები</span></button>
+  <button class="tab" data-view="summary"><svg class="ic"><use href="#i-chart"/></svg><span>შეჯამება</span></button>
+</nav>
 
 <!-- ყვავილების სია -->
 <dialog id="dlg-flowers">
   <form method="dialog" class="dlg">
-    <h3>ყვავილების სია</h3>
+    <div class="dlg-h">
+      <h3>ყვავილების სია</h3>
+      <button class="icon-btn" value="close" aria-label="დახურვა"><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
     <ul id="flower-list"></ul>
     <div class="add-flower">
       <input id="new-flower" type="text" placeholder="ახალი ყვავილი">
-      <button type="button" class="btn primary" id="btn-new-flower">დამატება</button>
+      <button type="button" class="btn primary" id="btn-new-flower"><svg class="ic"><use href="#i-plus"/></svg>დამატება</button>
     </div>
     <button class="btn ghost full" value="close">დახურვა</button>
   </form>
 </dialog>
 
 <div id="toast" role="status"></div>
-<script src="app.js"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>

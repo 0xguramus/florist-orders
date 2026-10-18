@@ -43,6 +43,7 @@ const nextNumber = () => db.orders.reduce((m, o) => Math.max(m, o.number), 1000)
 function show(view) {
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
+  document.body.dataset.view = view;
   if (view === 'list') renderOrders();
   if (view === 'summary') renderSummary();
   window.scrollTo(0, 0);
@@ -71,11 +72,11 @@ function addRow(flowerId = '', qty = 1, fallbackName = '') {
   row.innerHTML = `
     <select aria-label="ყვავილი">${opts}</select>
     <div class="stepper">
-      <button type="button" class="dec" aria-label="შემცირება">−</button>
+      <button type="button" class="dec" aria-label="შემცირება"><svg class="ic"><use href="#i-minus"/></svg></button>
       <input type="number" inputmode="numeric" min="1" value="${qty}" aria-label="რაოდენობა">
-      <button type="button" class="inc" aria-label="გაზრდა">+</button>
+      <button type="button" class="inc" aria-label="გაზრდა"><svg class="ic"><use href="#i-plus"/></svg></button>
     </div>
-    <button type="button" class="rm" aria-label="წაშლა">✕</button>`;
+    <button type="button" class="rm" aria-label="წაშლა"><svg class="ic"><use href="#i-x"/></svg></button>`;
   const sel = $('select', row), q = $('input', row);
   sel.addEventListener('change', () => {
     if (sel.value === '__new') {
@@ -101,7 +102,7 @@ function refreshSelects() {
 }
 function updateTotal() {
   const n = $$('#rows .row').reduce((s, r) => s + ($('select', r).value ? (+$('input', r).value || 0) : 0), 0);
-  $('#total-line').textContent = n ? `სულ: ${n} ღერო` : '';
+  $('#total-line').innerHTML = n ? `სულ <b>${n}</b> ღერო` : '';
 }
 function resetForm() {
   editingId = null;
@@ -202,7 +203,7 @@ function renderFlowerList() {
   $('#flower-list').innerHTML = db.flowers.map(f => `
     <li data-id="${f.id}">
       <input type="text" value="${esc(f.name)}" aria-label="ყვავილის სახელი">
-      <button type="button" class="rm" aria-label="წაშლა">✕</button>
+      <button type="button" class="rm" aria-label="წაშლა"><svg class="ic"><use href="#i-trash"/></svg></button>
     </li>`).join('') || '<li class="meta">სია ცარიელია.</li>';
   $$('#flower-list li[data-id]').forEach(li => {
     const id = li.dataset.id;
@@ -228,29 +229,34 @@ $('#btn-new-flower').onclick = () => {
 $('#new-flower').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#btn-new-flower').click(); } });
 
 /* ---------- შეკვეთების სია ---------- */
+const empty = (emoji, text) => `<div class="empty"><div class="empty-ic" aria-hidden="true">${emoji}</div><p>${text}</p></div>`;
 function renderOrders() {
   const q = $('#search').value.trim();
   const list = db.orders
     .filter(o => !q || String(o.number).includes(q))
     .sort((a, b) => new Date(b.date) - new Date(a.date) || b.number - a.number);
   if (!list.length) {
-    $('#orders').innerHTML = `<p class="empty">${q ? 'ამ ნომრით შეკვეთა ვერ მოიძებნა.' : 'შეკვეთები ჯერ არ არის.'}</p>`;
+    $('#orders').innerHTML = empty(q ? '🔍' : '💐', q ? 'ამ ნომრით შეკვეთა ვერ მოიძებნა.' : 'შეკვეთები ჯერ არ არის.');
     return;
   }
   $('#orders').innerHTML = list.map(o => {
     const stems = o.items.reduce((s, i) => s + i.qty, 0);
     return `
-    <article class="card">
+    <article class="card order">
       <div class="card-h">
-        <div><b>№${o.number}</b>${o.example ? '<span class="badge">მაგალითი</span>' : ''}</div>
-        <div class="meta">${fmtDate(o.date)}</div>
+        <div class="num">№${o.number}${o.example ? '<span class="badge">მაგალითი</span>' : ''}</div>
+        ${o.price != null && o.price !== '' ? `<div class="price">${money(o.price)}</div>` : ''}
       </div>
-      <div class="meta">${[o.florist && 'ფლორისტი: ' + esc(o.florist), stems + ' ღერო', money(o.price)].filter(Boolean).join(' · ')}</div>
-      <ul class="items">${o.items.map(i => `<li>${esc(i.name)} × ${i.qty}</li>`).join('')}</ul>
-      ${o.note ? `<div class="meta">📝 ${esc(o.note)}</div>` : ''}
+      <div class="meta">
+        <span><svg class="ic"><use href="#i-clock"/></svg>${fmtDate(o.date)}</span>
+        ${o.florist ? `<span><svg class="ic"><use href="#i-user"/></svg>${esc(o.florist)}</span>` : ''}
+        <span class="stems">${stems} ღერო</span>
+      </div>
+      <ul class="items">${o.items.map(i => `<li>${esc(i.name)}<b>${i.qty}</b></li>`).join('')}</ul>
+      ${o.note ? `<div class="note"><svg class="ic"><use href="#i-note"/></svg><span>${esc(o.note)}</span></div>` : ''}
       <div class="card-a">
-        <button class="btn ghost" data-edit="${o.id}">რედაქტირება</button>
-        <button class="btn danger" data-del="${o.id}">წაშლა</button>
+        <button class="btn ghost sm" data-edit="${o.id}"><svg class="ic"><use href="#i-edit"/></svg>რედაქტირება</button>
+        <button class="btn danger sm" data-del="${o.id}" aria-label="წაშლა"><svg class="ic"><use href="#i-trash"/></svg>წაშლა</button>
       </div>
     </article>`;
   }).join('');
@@ -284,7 +290,7 @@ function renderSummary() {
   $('#custom-range').hidden = range !== 'custom';
   const [s, e] = rangeBounds();
   const orders = db.orders.filter(o => { const d = new Date(o.date); return d >= s && d < e; });
-  if (!orders.length) { $('#summary').innerHTML = '<p class="empty">ამ პერიოდში შეკვეთა არ არის.</p>'; return; }
+  if (!orders.length) { $('#summary').innerHTML = empty('🌱', 'ამ პერიოდში შეკვეთა არ არის.'); return; }
   const totals = new Map();
   orders.forEach(o => o.items.forEach(i => {
     const name = flowerName(i.flowerId) || i.name;
@@ -293,17 +299,21 @@ function renderSummary() {
   const rows = [...totals].sort((a, b) => b[1] - a[1]);
   const stems = rows.reduce((t, r) => t + r[1], 0);
   const revenue = orders.reduce((t, o) => t + (o.price || 0), 0);
+  const max = rows[0][1];
   $('#summary').innerHTML = `
     <div class="stats">
       <div class="stat"><b>${orders.length}</b><span>შეკვეთა</span></div>
       <div class="stat"><b>${stems}</b><span>ღერო</span></div>
-      <div class="stat"><b>${revenue.toFixed(0)} ₾</b><span>შემოსავალი</span></div>
+      <div class="stat accent"><b>${revenue.toFixed(0)} ₾</b><span>შემოსავალი</span></div>
     </div>
-    <table>
-      <thead><tr><th>ყვავილი</th><th class="n">რაოდენობა</th></tr></thead>
-      <tbody>${rows.map(([n, q]) => `<tr><td>${esc(n)}</td><td class="n">${q}</td></tr>`).join('')}</tbody>
-      <tfoot><tr><td>სულ</td><td class="n">${stems}</td></tr></tfoot>
-    </table>`;
+    <div class="card table-card">
+      <div class="t-head"><span>ყვავილი</span><span>რაოდენობა</span></div>
+      <ul class="bars">${rows.map(([n, q]) => `
+        <li><div class="bar-l"><span>${esc(n)}</span><b>${q}</b></div>
+        <div class="bar"><i style="width:${Math.max(4, Math.round(q / max * 100))}%"></i></div></li>`).join('')}
+      </ul>
+      <div class="t-foot"><span>სულ</span><b>${stems}</b></div>
+    </div>`;
 }
 $$('.chip').forEach(c => c.addEventListener('click', () => {
   range = c.dataset.range;
@@ -343,3 +353,6 @@ $('#btn-reset').onclick = () => {
 
 load();
 resetForm();
+document.body.dataset.view = 'form';
+{ const d = new Date(), DAYS = ['კვირა', 'ორშაბათი', 'სამშაბათი', 'ოთხშაბათი', 'ხუთშაბათი', 'პარასკევი', 'შაბათი'];
+  $('#today-line').textContent = `${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`; }
