@@ -13,7 +13,15 @@ const money = v => (v == null || v === '') ? '' : Number(v).toFixed(2) + ' ₾';
 
 /* ---------- API ---------- */
 class ApiError extends Error { constructor(msg, status) { super(msg); this.status = status; } }
+// ცვლილებების მრიცხველი: ფონური სინქრონიზაცია ახალ ლოკალურ ცვლილებას არ გადააწერს
+let mutSeq = 0, inflight = 0;
 async function api(path, { method = 'GET', body } = {}) {
+  const mut = method !== 'GET';
+  if (mut) { inflight++; mutSeq++; }
+  try { return await apiRaw(path, method, body); }
+  finally { if (mut) { inflight--; mutSeq++; setTimeout(saveCache, 0); } }
+}
+async function apiRaw(path, method, body) {
   let r;
   try {
     r = await fetch('/api/' + path, {
@@ -24,7 +32,7 @@ async function api(path, { method = 'GET', body } = {}) {
   } catch {
     throw new ApiError('ინტერნეტთან კავშირი ვერ მოხერხდა. შეამოწმეთ ინტერნეტი და სცადეთ თავიდან.', 0);
   }
-  if (r.status === 401) { location.href = '/login'; throw new ApiError('სესია ამოიწურა. შედით თავიდან.', 401); }
+  if (r.status === 401) { clearCache(); location.href = '/login'; throw new ApiError('სესია ამოიწურა. შედით თავიდან.', 401); }
   const data = await r.json().catch(() => null);
   if (!r.ok) throw new ApiError(data?.error || `შეცდომა (${r.status}). სცადეთ თავიდან.`, r.status);
   return data;
@@ -34,19 +42,44 @@ async function api(path, { method = 'GET', body } = {}) {
 const db = { flowers: [], orders: [], writeoffs: [] };
 const sameId = (a, b) => String(a) === String(b);
 const flowerName = id => db.flowers.find(f => sameId(f.id, id))?.name;
-async function fetchOrders() { db.orders = (await api('orders')).orders; }
-async function fetchFlowers() { db.flowers = (await api('flowers')).flowers; }
-async function fetchWriteOffs() { db.writeoffs = (await api('writeoffs')).writeoffs; }
-// ხედის გადართვისას ახალი მონაცემები წამოვიღოთ (ფლორისტის შეყვანილი სხვა მოწყობილობიდანაც ჩანს)
-let refreshing = null;
-function refreshOrders(render) {
-  if (!refreshing) refreshing = fetchOrders().finally(() => { refreshing = null; });
-  refreshing.then(render, e => toast(e.message));
+// ბოლო მონაცემები ამ მოწყობილობაზე ინახება: გვერდი მყისიერად იხსნება, განახლება ფონურად მოდის.
+// გასვლისას ან სესიის ამოწურვისას იშლება.
+const CACHE_KEY = 'ft:data:v1';
+function saveCache() {
+  if (!booted) return;
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), flowers: db.flowers, orders: db.orders, writeoffs: db.writeoffs })); } catch {}
 }
-let refreshingWo = null;
-function refreshWriteOffs(render) {
-  if (!refreshingWo) refreshingWo = fetchWriteOffs().finally(() => { refreshingWo = null; });
-  refreshingWo.then(render, e => toast(e.message));
+function loadCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+    if (c && [c.flowers, c.orders, c.writeoffs].every(Array.isArray)) return c;
+  } catch {}
+  return null;
+}
+function clearCache() { try { localStorage.removeItem(CACHE_KEY); } catch {} }
+function applyData(d) { db.flowers = d.flowers; db.orders = d.orders; db.writeoffs = d.writeoffs; }
+
+// ერთი მოთხოვნა (/api/bootstrap) ყველაფრისთვის; შედეგი მხოლოდ მაშინ ვრცელდება, თუ შუალედში ლოკალური ცვლილება არ მომხდარა
+let lastSync = 0, syncing = null;
+function sync() {
+  if (!syncing) {
+    const seq = mutSeq;
+    syncing = api('bootstrap').then(d => {
+      if (seq !== mutSeq || inflight) return; // ძველი პასუხია — შემდეგ ჯერზე
+      applyData(d); lastSync = Date.now(); saveCache();
+      refreshSelects(); renderCurrent();
+    }).finally(() => { syncing = null; });
+  }
+  return syncing;
+}
+// ფონური განახლება, არაუმეტეს maxAge-ში ერთხელ; ქსელის შეცდომა ჩუმად გამოტოვდება
+function maybeSync(maxAge = 30000) {
+  if (!booted || Date.now() - lastSync < maxAge) return;
+  sync().catch(e => { if (e.status && e.status !== 401) toast(e.message); });
+}
+function renderCurrent() {
+  const v = document.body.dataset.view;
+  if (v === 'orders') renderOrders(); else if (v === 'writeoff') renderWriteOffs(); else if (v === 'summary') renderSummary();
 }
 
 /* ---------- პერიოდის ფილტრი (შეჯამება და ისტორიები) ---------- */
@@ -107,14 +140,9 @@ function show(view) {
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
   document.body.dataset.view = view;
-  if (view === 'orders') { renderOrders(); refreshOrders(() => document.body.dataset.view === 'orders' && renderOrders()); }
-  if (view === 'writeoff') { renderWriteOffs(); refreshWriteOffs(() => document.body.dataset.view === 'writeoff' && renderWriteOffs()); }
-  if (view === 'summary') {
-    renderSummary();
-    const again = () => document.body.dataset.view === 'summary' && renderSummary();
-    refreshOrders(again); refreshWriteOffs(again);
-  }
+  renderCurrent(); // მეხსიერებიდან, მყისიერად
   window.scrollTo(0, 0);
+  maybeSync();
 }
 $$('.tab').forEach(t => t.addEventListener('click', () => show(t.dataset.view)));
 
@@ -281,9 +309,9 @@ $('#order-form').addEventListener('submit', async e => {
     if (err.status === 409) {
       $('#err-number').textContent = err.message; $('#f-number').classList.add('invalid');
       $('#f-number').scrollIntoView({ block: 'center', behavior: 'smooth' });
-      fetchOrders().catch(() => {});
+      sync().catch(() => {});
     } else if (err.status === 404) {
-      toast(err.message); resetForm(); refreshOrders(renderOrders);
+      toast(err.message); resetForm(); sync().catch(() => {});
     } else toast(err.message);
     return;
   }
@@ -385,16 +413,17 @@ function renderOrders() {
   $$('[data-del]').forEach(b => b.onclick = async () => {
     const o = db.orders.find(x => sameId(x.id, b.dataset.del));
     if (!o || !confirm(`წაიშალოს შეკვეთა №${o.number}? ამ მოქმედებას ვეღარ გააუქმებთ.`)) return;
-    b.disabled = true;
-    try {
-      await api(`orders/${o.id}`, { method: 'DELETE' });
-    } catch (err) {
-      b.disabled = false;
-      if (err.status !== 404) { toast(err.message); return; }
-    }
+    // ოპტიმისტურად: ბარათი მაშინვე ქრება; შეცდომისას ბრუნდება
     if (sameId(editingId, o.id)) resetForm();
     db.orders = db.orders.filter(x => !sameId(x.id, o.id)); renderOrders();
     toast(`შეკვეთა №${o.number} წაიშალა.`);
+    try {
+      await api(`orders/${o.id}`, { method: 'DELETE' });
+    } catch (err) {
+      if (err.status === 404) return;
+      if (!db.orders.some(x => sameId(x.id, o.id))) db.orders.push(o);
+      renderCurrent(); toast(`№${o.number} ვერ წაიშალა: ${err.message}`);
+    }
   });
   markEditing();
 }
@@ -466,15 +495,15 @@ function renderWriteOffs() {
   $$('[data-wdel]').forEach(b => b.onclick = async () => {
     const w = db.writeoffs.find(x => sameId(x.id, b.dataset.wdel));
     if (!w || !confirm(`წაიშალოს ჩამოწერა (${fmtDate(w.date)}, ${stemsOf(w)} ღერო)? ამ მოქმედებას ვეღარ გააუქმებთ.`)) return;
-    b.disabled = true;
+    db.writeoffs = db.writeoffs.filter(x => !sameId(x.id, w.id)); renderWriteOffs();
+    toast('ჩამოწერა წაიშალა.');
     try {
       await api(`writeoffs/${w.id}`, { method: 'DELETE' });
     } catch (err) {
-      b.disabled = false;
-      if (err.status !== 404) { toast(err.message); return; }
+      if (err.status === 404) return;
+      if (!db.writeoffs.some(x => sameId(x.id, w.id))) db.writeoffs.push(w);
+      renderCurrent(); toast(`ჩამოწერა ვერ წაიშალა: ${err.message}`);
     }
-    db.writeoffs = db.writeoffs.filter(x => !sameId(x.id, w.id)); renderWriteOffs();
-    toast('ჩამოწერა წაიშალა.');
   });
 }
 
@@ -545,6 +574,7 @@ $('#btn-csv').onclick = () => {
 /* ---------- გასვლა ---------- */
 $('#btn-logout').onclick = async () => {
   if (!confirm('გამოხვიდეთ ანგარიშიდან?')) return;
+  clearCache();
   try { await fetch('/api/logout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}', credentials: 'same-origin' }); } catch {}
   location.replace('/login');
 };
@@ -555,30 +585,36 @@ $('#btn-logout').onclick = async () => {
 document.body.dataset.view = 'orders';
 
 let booted = false;
+function startUI() {
+  resetForm(); resetWoForm(); renderOrders();
+  booted = true;
+  // ჩატვირთვის ეკრანი DOM-იდან ამოვიღოთ, რომ „იტვირთება…“ აღარსად გამოჩნდეს
+  $('#boot')?.remove();
+}
 async function boot() {
+  const cached = loadCache();
+  if (cached) {
+    // მყისიერი გახსნა ბოლო ცნობილი მონაცემებით, შემდეგ ფონური განახლება
+    applyData(cached); startUI();
+    sync().catch(e => { if (e.status && e.status !== 401) toast(e.message); });
+    return;
+  }
+  document.documentElement.classList.remove('has-cache');
   $('#boot').hidden = false; $('#boot-load').hidden = false; $('#boot-err').hidden = true;
   // ძალიან ნელი ქსელის შემთხვევაში „იტვირთება…“ სამუდამოდ არ უნდა დარჩეს
   const timeout = new Promise((_, rej) => setTimeout(() => rej(new ApiError('სერვერი დიდხანს არ პასუხობს. სცადეთ თავიდან.', 0)), 20000));
   try {
-    await Promise.race([Promise.all([fetchFlowers(), fetchOrders(), fetchWriteOffs()]), timeout]);
-    resetForm(); resetWoForm(); renderOrders();
+    applyData(await Promise.race([api('bootstrap'), timeout]));
   } catch (e) {
     if (e.status === 401) return; // გადამისამართება შესვლის გვერდზე
     $('#boot-load').hidden = true; $('#boot-err').hidden = false; $('#boot-msg').textContent = e.message;
     return;
   }
-  booted = true;
-  // ჩატვირთვის ეკრანი DOM-იდან ამოვიღოთ, რომ „იტვირთება…“ აღარსად გამოჩნდეს
-  $('#boot').remove();
+  lastSync = Date.now();
+  startUI(); saveCache();
 }
 $('#btn-retry').onclick = boot;
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible' || !booted) return;
-  const v = document.body.dataset.view;
-  if (v === 'orders') refreshOrders(renderOrders);
-  else if (v === 'writeoff') refreshWriteOffs(renderWriteOffs);
-  else if (v === 'summary') { refreshOrders(renderSummary); refreshWriteOffs(renderSummary); }
-});
-// iOS Safari-ში „უკან“ ღილაკით (bfcache) დაბრუნებისას მონაცემები განვაახლოთ
-window.addEventListener('pageshow', e => { if (e.persisted && !booted) location.reload(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') maybeSync(10000); });
+// iOS Safari-ში „უკან“ ღილაკით (bfcache) დაბრუნებისას
+window.addEventListener('pageshow', e => { if (e.persisted) { if (!booted) location.reload(); else maybeSync(0); } });
 boot();

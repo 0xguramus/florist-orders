@@ -18,17 +18,25 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_login_failures ON login_failures(ip, ts)`,
 ];
 
+// Bump when SCHEMA changes: a fresh isolate then does one cheap read instead of ~17 DDL writes.
+export const SCHEMA_VERSION = '3';
+
 let ready = null; // per-isolate memo
 export function ensureSchema(env) {
   if (!env.DB) throw new HttpError(500, 'ბაზა არ არის მიერთებული (D1 binding „DB“).');
   if (!ready) {
     ready = (async () => {
-      await env.DB.batch(SCHEMA.map(s => env.DB.prepare(s)));
+      const db = env.DB;
+      const cur = await db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).first('value').catch(() => null); // meta may not exist yet
+      if (cur === SCHEMA_VERSION) return;
+      // Idempotent: CREATE ... IF NOT EXISTS never drops data.
+      await db.batch(SCHEMA.map(s => db.prepare(s)));
       // Seed the default flower list exactly once (an emptied list stays empty).
-      const r = await env.DB.prepare(`INSERT OR IGNORE INTO meta (key, value) VALUES ('flowers_seeded', datetime('now'))`).run();
+      const r = await db.prepare(`INSERT OR IGNORE INTO meta (key, value) VALUES ('flowers_seeded', datetime('now'))`).run();
       if (r.meta.changes) {
-        await env.DB.batch(DEFAULT_FLOWERS.map(n => env.DB.prepare('INSERT OR IGNORE INTO flowers (name) VALUES (?)').bind(n)));
+        await db.batch(DEFAULT_FLOWERS.map(n => db.prepare('INSERT OR IGNORE INTO flowers (name) VALUES (?)').bind(n)));
       }
+      await db.prepare(`INSERT INTO meta (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`).bind(SCHEMA_VERSION).run();
     })().catch(e => { ready = null; throw e; });
   }
   return ready;
@@ -153,4 +161,25 @@ export function cleanName(v) {
   const name = String(v ?? '').trim().replace(/\s+/g, ' ').slice(0, 80);
   if (!name) throw new HttpError(400, 'ჩაწერეთ ყვავილის სახელი.');
   return name;
+}
+
+// Everything the app needs, in ONE D1 round trip (a batch of 5 reads).
+export async function loadAll(db) {
+  const [fl, or, oi, wo, wi] = await db.batch([
+    db.prepare('SELECT id, name FROM flowers WHERE active = 1 ORDER BY id'),
+    db.prepare('SELECT id, number, date, price, note FROM orders ORDER BY date DESC, number DESC'),
+    db.prepare('SELECT order_id, flower_id, flower_name, qty FROM order_items ORDER BY id'),
+    db.prepare('SELECT id, date, reason, note FROM write_offs ORDER BY date DESC, id DESC'),
+    db.prepare('SELECT write_off_id, flower_id, flower_name, qty FROM write_off_items ORDER BY id'),
+  ]);
+  const attach = (rows, items, key) => {
+    const by = new Map(rows.map(r => [r.id, (r.items = [], r)]));
+    for (const it of items) by.get(it[key])?.items.push({ flowerId: it.flower_id, name: it.flower_name, qty: it.qty });
+    return rows;
+  };
+  return {
+    flowers: fl.results,
+    orders: attach(or.results, oi.results, 'order_id'),
+    writeoffs: attach(wo.results, wi.results, 'write_off_id'),
+  };
 }

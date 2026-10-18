@@ -21,9 +21,11 @@ export async function onRequestPost({ request, env }) {
   let db = null;
   try { await ensureSchema(env); db = env.DB; } catch { /* login still works without the DB, just without throttling */ }
 
+  let fails = 0;
   if (db) {
     const row = await db.prepare('SELECT COUNT(*) AS n FROM login_failures WHERE ip = ? AND ts > ?').bind(ip, now - WINDOW_MS).first();
-    if (row.n >= MAX_FAILS) return reply(false, 429, 'ძალიან ბევრი მცდელობა. სცადეთ 15 წუთში.');
+    fails = row.n;
+    if (fails >= MAX_FAILS) return reply(false, 429, 'ძალიან ბევრი მცდელობა. სცადეთ 15 წუთში.');
   }
 
   if (!password || !(await safeEqual(password, env.APP_PASSWORD))) {
@@ -34,6 +36,6 @@ export async function onRequestPost({ request, env }) {
     return reply(false, 401, 'პაროლი არასწორია.');
   }
 
-  if (db) await db.prepare('DELETE FROM login_failures WHERE ip = ?').bind(ip).run();
+  if (db && fails) await db.prepare('DELETE FROM login_failures WHERE ip = ?').bind(ip).run(); // skip the write when there is nothing to clear
   return reply(true, 200, null, { 'Set-Cookie': sessionCookie(await makeToken(env.SESSION_SECRET)) });
 }

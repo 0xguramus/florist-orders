@@ -13,7 +13,6 @@ export const onRequestPost = handler(async ({ request, env }) => {
     ...w.items.map(it => db.prepare('INSERT INTO write_off_items (write_off_id, flower_id, flower_name, qty) VALUES ((SELECT MAX(id) FROM write_offs), ?, ?, ?)')
       .bind(it.flowerId, it.name, it.qty)),
   ]);
-  const id = ins.results[0].id;
-  const [writeoff] = await loadWriteOffs(db, 'WHERE id = ?', [id]);
-  return json({ writeoff }, 201);
+  const { date, reason, note, items } = w;
+  return json({ writeoff: { id: ins.results[0].id, date, reason, note, items } }, 201);
 });

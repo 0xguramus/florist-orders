@@ -1,7 +1,11 @@
 import { COOKIE, getCookie, verifyToken, isConfigured } from './_lib/auth.js';
 
-// Reachable without a session: the login page, its fonts, and the login/logout endpoints.
-const PUBLIC_PATHS = new Set(['/login', '/login.html', '/api/login', '/api/logout']);
+// Reachable without a session: the login page, its fonts, the login/logout endpoints, and the
+// static app code (contains no data; lets the login page prefetch it). All data stays behind /api auth.
+const PUBLIC_PATHS = new Set(['/login', '/login.html', '/api/login', '/api/logout', '/app.js', '/style.css']);
+// Fonts never change; app.js/style.css are immutable only when requested with ?v=N (bumped on each change).
+const immutable = url => url.pathname.startsWith('/fonts/') || (/^\/(app\.js|style\.css)$/.test(url.pathname) && url.searchParams.has('v'));
+const IMMUTABLE = 'public, max-age=31536000, immutable';
 const PUBLIC_PREFIXES = ['/fonts/'];
 const isPublic = p => PUBLIC_PATHS.has(p) || PUBLIC_PREFIXES.some(x => p.startsWith(x));
 
@@ -38,16 +42,19 @@ export async function onRequest({ request, env, next }) {
     if (origin && origin !== url.origin) return withHeaders(jsonErr(403, 'მოთხოვნა უარყოფილია.'));
   }
 
-  const authed = await verifyToken(env.SESSION_SECRET, getCookie(request, COOKIE));
+  const checkAuth = () => verifyToken(env.SESSION_SECRET, getCookie(request, COOKIE));
 
   if (isPublic(path)) {
-    if (authed && (path === '/login' || path === '/login.html') && request.method === 'GET') {
+    const isLoginPage = path === '/login' || path === '/login.html';
+    if (isLoginPage && request.method === 'GET' && await checkAuth()) {
       return withHeaders(Response.redirect(new URL('/', url), 302));
     }
-    return withHeaders(await next(), path.startsWith('/login') ? { 'Cache-Control': 'no-store' } : {});
+    const res = await next();
+    if (path.startsWith('/login')) return withHeaders(res, { 'Cache-Control': 'no-store' });
+    return withHeaders(res, res.ok && immutable(url) ? { 'Cache-Control': IMMUTABLE } : {});
   }
 
-  if (!authed) {
+  if (!(await checkAuth())) {
     if (isApi) return withHeaders(jsonErr(401, 'სესია ამოიწურა. შედით თავიდან.'));
     return withHeaders(new Response(null, { status: 302, headers: { Location: '/login', 'Cache-Control': 'no-store' } }));
   }

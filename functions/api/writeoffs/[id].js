@@ -12,14 +12,14 @@ export const onRequestGet = handler(async ({ params, env }) => {
 export const onRequestPut = handler(async ({ params, request, env }) => {
   const id = parseId(params.id), db = env.DB;
   const w = await validateWriteOff(db, await readJson(request));
-  if (!(await db.prepare('SELECT 1 FROM write_offs WHERE id = ?').bind(id).first())) throw notFound();
-  await db.batch([
+  const [upd] = await db.batch([
     db.prepare(`UPDATE write_offs SET date = ?, reason = ?, note = ?, updated_at = datetime('now') WHERE id = ?`).bind(w.date, w.reason, w.note, id),
     db.prepare('DELETE FROM write_off_items WHERE write_off_id = ?').bind(id),
-    ...w.items.map(it => db.prepare('INSERT INTO write_off_items (write_off_id, flower_id, flower_name, qty) VALUES (?, ?, ?, ?)').bind(id, it.flowerId, it.name, it.qty)),
+    ...w.items.map(it => db.prepare('INSERT INTO write_off_items (write_off_id, flower_id, flower_name, qty) SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM write_offs WHERE id = ?)').bind(id, it.flowerId, it.name, it.qty, id)),
   ]);
-  const [writeoff] = await loadWriteOffs(db, 'WHERE id = ?', [id]);
-  return json({ writeoff });
+  if (!upd.meta.changes) throw notFound();
+  const { date, reason, note, items } = w;
+  return json({ writeoff: { id, date, reason, note, items } });
 });
 
 // DELETE /api/writeoffs/:id
