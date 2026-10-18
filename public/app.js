@@ -49,6 +49,59 @@ function refreshWriteOffs(render) {
   refreshingWo.then(render, e => toast(e.message));
 }
 
+/* ---------- პერიოდის ფილტრი (შეჯამება და ისტორიები) ---------- */
+const RANGE_PRESETS = [['today', 'დღეს'], ['week', 'ბოლო 7 დღე'], ['month', 'ეს თვე'], ['custom', 'პერიოდი']];
+// el-ში ააწყობს ჩიპებს და თარიღის ველებს; withAll — დამატებითი „ყველა“ (ისტორიისთვის)
+function makeRange(el, { initial = 'today', withAll = false, onChange }) {
+  const presets = withAll ? [['all', 'ყველა'], ...RANGE_PRESETS] : RANGE_PRESETS;
+  let mode = initial;
+  el.innerHTML = `
+    <div class="chips" role="tablist" aria-label="პერიოდი">${presets.map(([k, t]) =>
+      `<button type="button" class="chip${k === mode ? ' active' : ''}" role="tab" aria-selected="${k === mode}" data-range="${k}">${t}</button>`).join('')}</div>
+    <div class="grid2 card custom-range" hidden>
+      <label>საწყისი თარიღი<input class="r-from" type="date"></label>
+      <label>საბოლოო თარიღი<input class="r-to" type="date"></label>
+    </div>`;
+  const from = $('.r-from', el), to = $('.r-to', el), custom = $('.custom-range', el);
+  $$('.chip', el).forEach(c => c.addEventListener('click', () => {
+    mode = c.dataset.range;
+    $$('.chip', el).forEach(x => { x.classList.toggle('active', x === c); x.setAttribute('aria-selected', x === c); });
+    if (mode === 'custom' && !from.value) {
+      const d = new Date(); to.value = toDateInput(d); d.setDate(d.getDate() - 6); from.value = toDateInput(d);
+    }
+    custom.hidden = mode !== 'custom';
+    onChange();
+  }));
+  [from, to].forEach(i => i.addEventListener('change', onChange));
+  function bounds() {
+    const start = new Date(); start.setHours(0, 0, 0, 0);
+    const end = new Date(start); end.setDate(end.getDate() + 1);
+    if (mode === 'all') return [new Date(-8.64e15), new Date(8.64e15)];
+    if (mode === 'week') start.setDate(start.getDate() - 6);
+    if (mode === 'month') start.setDate(1);
+    if (mode === 'custom') {
+      const s = from.value ? new Date(from.value + 'T00:00') : new Date(-8.64e15);
+      const e = to.value ? new Date(to.value + 'T00:00') : new Date(8.64e15); if (to.value) e.setDate(e.getDate() + 1);
+      return [s, e];
+    }
+    return [start, end];
+  }
+  return {
+    get mode() { return mode; },
+    has(rec) { const [s, e] = bounds(); const d = dayDate(rec.date); return d >= s && d < e; },
+    // CSV ფაილის სახელისთვის
+    slug() {
+      if (mode === 'all') return 'sruli';
+      const [s, e] = bounds(); const last = new Date(e); last.setDate(last.getDate() - 1);
+      const a = s.getFullYear() > 1900 ? toDateInput(s) : '', b = e.getFullYear() < 9000 ? toDateInput(last) : '';
+      return a === b ? a : [a, b].filter(Boolean).join('_') || 'sruli';
+    },
+  };
+}
+const ordersRange = makeRange($('#range-orders'), { initial: 'all', withAll: true, onChange: () => renderOrders() });
+const woRange = makeRange($('#range-writeoffs'), { initial: 'all', withAll: true, onChange: () => renderWriteOffs() });
+const summaryRange = makeRange($('#range-summary'), { initial: 'today', onChange: () => renderSummary() });
+
 /* ---------- ნავიგაცია ---------- */
 function show(view) {
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
@@ -292,13 +345,20 @@ $('#new-flower').addEventListener('keydown', e => { if (e.key === 'Enter') { e.p
 
 /* ---------- შეკვეთების სია ---------- */
 const empty = (emoji, text) => `<div class="empty"><div class="empty-ic" aria-hidden="true">${emoji}</div><p>${text}</p></div>`;
-function renderOrders() {
+// ისტორიაში ნაჩვენები შეკვეთები: პერიოდი + ნომრით ძებნა (CSV-იც ამას იყენებს)
+function visibleOrders() {
   const q = $('#search').value.trim();
-  const list = db.orders
-    .filter(o => !q || String(o.number).includes(q))
+  return db.orders
+    .filter(o => ordersRange.has(o) && (!q || String(o.number).includes(q)))
     .sort((a, b) => dayOf(b.date).localeCompare(dayOf(a.date)) || b.number - a.number);
+}
+function renderOrders() {
+  const q = $('#search').value.trim(), filtered = ordersRange.mode !== 'all';
+  const list = visibleOrders();
   if (!list.length) {
-    $('#orders').innerHTML = empty(q ? '🔍' : '💐', q ? 'ამ ნომრით შეკვეთა ვერ მოიძებნა.' : 'შეკვეთები ჯერ არ არის.');
+    $('#orders').innerHTML = !db.orders.length ? empty('💐', 'შეკვეთები ჯერ არ არის.')
+      : q ? empty('🔍', filtered ? 'ამ პერიოდში ამ ნომრით შეკვეთა ვერ მოიძებნა.' : 'ამ ნომრით შეკვეთა ვერ მოიძებნა.')
+      : empty('🗓️', 'ამ პერიოდში შეკვეთა არ არის.');
     return;
   }
   $('#orders').innerHTML = list.map(o => {
@@ -382,8 +442,11 @@ $('#wo-form').addEventListener('submit', async e => {
 });
 
 function renderWriteOffs() {
-  const list = [...db.writeoffs].sort((a, b) => dayOf(b.date).localeCompare(dayOf(a.date)) || b.id - a.id);
-  if (!list.length) { $('#writeoffs').innerHTML = empty('🍂', 'ჩამოწერილი ყვავილები ჯერ არ არის.'); return; }
+  const list = db.writeoffs.filter(w => woRange.has(w)).sort((a, b) => dayOf(b.date).localeCompare(dayOf(a.date)) || b.id - a.id);
+  if (!list.length) {
+    $('#writeoffs').innerHTML = db.writeoffs.length ? empty('🗓️', 'ამ პერიოდში ჩამოწერა არ არის.') : empty('🍂', 'ჩამოწერილი ყვავილები ჯერ არ არის.');
+    return;
+  }
   $('#writeoffs').innerHTML = list.map(w => {
     const stems = w.items.reduce((s, i) => s + i.qty, 0);
     return `
@@ -416,20 +479,6 @@ function renderWriteOffs() {
 }
 
 /* ---------- შეჯამება ---------- */
-let range = 'today';
-function rangeBounds() {
-  const now = new Date(), start = new Date(now); start.setHours(0, 0, 0, 0);
-  const end = new Date(start); end.setDate(end.getDate() + 1);
-  if (range === 'week') start.setDate(start.getDate() - 6);
-  if (range === 'month') start.setDate(1);
-  if (range === 'custom') {
-    const f = $('#r-from').value, t = $('#r-to').value;
-    const s = f ? new Date(f + 'T00:00') : new Date(0);
-    const e = t ? new Date(t + 'T00:00') : new Date(8.64e15); if (t) e.setDate(e.getDate() + 1);
-    return [s, e];
-  }
-  return [start, end];
-}
 function flowerTotals(records) {
   const totals = new Map();
   records.forEach(o => o.items.forEach(i => {
@@ -451,9 +500,7 @@ function barsCard(rows, cls = '') {
     </div>`;
 }
 function renderSummary() {
-  $('#custom-range').hidden = range !== 'custom';
-  const [s, e] = rangeBounds();
-  const inRange = r => { const d = dayDate(r.date); return d >= s && d < e; };
+  const inRange = r => summaryRange.has(r);
   const orders = db.orders.filter(inRange);
   const wos = db.writeoffs.filter(inRange);
   if (!orders.length && !wos.length) { $('#summary').innerHTML = empty('🌱', 'ამ პერიოდში შეკვეთა და ჩამოწერა არ არის.'); return; }
@@ -472,23 +519,16 @@ function renderSummary() {
     <h3 class="sec-h">ჩამოწერილი${lostStems ? ` <span class="sec-n">${lostStems} ღერო</span>` : ''}</h3>
     ${lost.length ? barsCard(lost, 'loss') : `<div class="card muted-card">ამ პერიოდში ჩამოწერა არ არის.</div>`}`;
 }
-$$('.chip').forEach(c => c.addEventListener('click', () => {
-  range = c.dataset.range;
-  $$('.chip').forEach(x => x.classList.toggle('active', x === c));
-  if (range === 'custom' && !$('#r-from').value) {
-    const d = new Date(); $('#r-to').value = toDateInput(d); d.setDate(d.getDate() - 6); $('#r-from').value = toDateInput(d);
-  }
-  renderSummary();
-}));
-['#r-from', '#r-to'].forEach(s => $(s).addEventListener('change', renderSummary));
+
 
 /* ---------- CSV ---------- */
 $('#btn-csv').onclick = () => {
-  if (!db.orders.length) { toast('ჩამოსატვირთი შეკვეთა ჯერ არ არის.'); return; }
+  const list = visibleOrders();
+  if (!list.length) { toast(db.orders.length ? 'არჩეულ პერიოდში ჩამოსატვირთი შეკვეთა არ არის.' : 'ჩამოსატვირთი შეკვეთა ჯერ არ არის.'); return; }
   const head = ['შეკვეთის ნომერი', 'თარიღი', 'ყვავილი', 'რაოდენობა', 'ფასი (₾)', 'შენიშვნა'];
   const cell = v => { const s = String(v ?? ''); return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   const lines = [head.map(cell).join(',')];
-  [...db.orders].sort((a, b) => a.number - b.number).forEach(o => {
+  [...list].sort((a, b) => a.number - b.number).forEach(o => {
     o.items.forEach((i, idx) => lines.push([
       o.number, dayOf(o.date),
       flowerName(i.flowerId) || i.name, i.qty, idx === 0 ? (o.price ?? '') : '', idx === 0 ? o.note : '',
@@ -497,7 +537,7 @@ $('#btn-csv').onclick = () => {
   const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `shekvetebi-${toDateInput(new Date())}.csv`;
+  a.download = `shekvetebi-${ordersRange.slug()}.csv`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };

@@ -14,7 +14,7 @@
 <title>შეკვეთების ჟურნალი</title>
 <link rel="preload" href="/fonts/FiraGO-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/FiraGO-SemiBold.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/style.css?v=7">
+<link rel="stylesheet" href="/style.css?v=8">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -92,6 +92,7 @@
     </form>
 
     <h3 class="sec-h">შეკვეთების ისტორია</h3>
+    <div class="range" id="range-orders"></div>
     <div class="list-tools">
       <div class="search">
         <svg class="ic"><use href="#i-search"/></svg>
@@ -102,10 +103,10 @@
     <div id="orders"></div>
   </section>
 
-  <!-- ჩამოწერა -->
+  <!-- ჩამოწერები -->
   <section id="view-writeoff" class="view">
     <form id="wo-form" autocomplete="off" novalidate>
-      <h2>ჩამოწერა</h2>
+      <h2>ჩამოწერები</h2>
       <p class="lead">გამხმარი ან დაზიანებული ყვავილები, რომლებიც გასაყიდად აღარ გამოდგება.</p>
 
       <div class="card">
@@ -141,25 +142,15 @@
       </div>
     </form>
 
-    <h3 class="sec-h">ჩამოწერის ისტორია</h3>
+    <h3 class="sec-h">ჩამოწერების ისტორია</h3>
+    <div class="range" id="range-writeoffs"></div>
     <div id="writeoffs"></div>
   </section>
 
   <!-- შეჯამება -->
   <section id="view-summary" class="view">
     <h2>შეჯამება</h2>
-    <div class="range">
-      <div class="chips" role="tablist">
-        <button class="chip active" data-range="today">დღეს</button>
-        <button class="chip" data-range="week">ბოლო 7 დღე</button>
-        <button class="chip" data-range="month">ეს თვე</button>
-        <button class="chip" data-range="custom">პერიოდი</button>
-      </div>
-      <div class="grid2 card" id="custom-range" hidden>
-        <label>საწყისი თარიღი<input id="r-from" type="date"></label>
-        <label>საბოლოო თარიღი<input id="r-to" type="date"></label>
-      </div>
-    </div>
+    <div class="range" id="range-summary"></div>
     <div id="summary"></div>
   </section>
 
@@ -168,7 +159,7 @@
 
 <nav class="tabbar" aria-label="ნავიგაცია">
   <button class="tab active" data-view="orders"><svg class="ic"><use href="#i-list"/></svg><span>შეკვეთები</span></button>
-  <button class="tab" data-view="writeoff"><svg class="ic"><use href="#i-waste"/></svg><span>ჩამოწერა</span></button>
+  <button class="tab" data-view="writeoff"><svg class="ic"><use href="#i-waste"/></svg><span>ჩამოწერები</span></button>
   <button class="tab" data-view="summary"><svg class="ic"><use href="#i-chart"/></svg><span>შეჯამება</span></button>
 </nav>
 
@@ -199,6 +190,6 @@
 </div>
 
 <div id="toast" role="status"></div>
-<script src="/app.js?v=7"></script>
+<script src="/app.js?v=8"></script>
 </body>
 </html>

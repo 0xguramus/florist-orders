@@ -135,7 +135,7 @@ input.invalid{border-color:var(--red);background:var(--red-2)}
 .chips::-webkit-scrollbar{display:none}
 .chip{flex:1 0 auto;font:inherit;font-size:13px;font-weight:600;border:0;background:transparent;border-radius:11px;padding:9px 10px;color:var(--mu);white-space:nowrap;transition:background-color .2s,color .2s}
 .chip.active{background:var(--ac);color:var(--ac-tx)}
-#custom-range{margin-bottom:14px}
+.custom-range{margin-bottom:14px}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
 .stat{background:var(--card);border-radius:var(--r);padding:14px 10px;text-align:center;box-shadow:var(--sh)}
 .stat b{display:block;font-size:24px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -229,3 +229,6 @@ dialog::backdrop{background:rgba(12,18,15,.45);-webkit-backdrop-filter:blur(3px)
 /* რედაქტირებადი შეკვეთა ისტორიაში */
 .order.editing{box-shadow:0 0 0 2px var(--ac),var(--sh)}
 .order.editing .num::after{content:"რედაქტირდება";font-size:11px;font-weight:600;background:var(--ac-2);color:var(--ac);border-radius:999px;padding:2px 9px}
+/* 5 ჩიპი (ისტორიის ფილტრი) ვიწრო ეკრანზეც ჩაეტიოს */
+.chips{gap:2px}
+@media(max-width:430px){.chip{font-size:12.5px;padding:9px 6px}}
