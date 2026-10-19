@@ -2,9 +2,10 @@ import { COOKIE, getCookie, verifyToken, isConfigured } from './_lib/auth.js';
 
 // Reachable without a session: the login page, its fonts, the login/logout endpoints, and the
 // static app code (contains no data; lets the login page prefetch it). All data stays behind /api auth.
-const PUBLIC_PATHS = new Set(['/login', '/login.html', '/api/login', '/api/logout', '/app.js', '/style.css']);
+const PUBLIC_PATHS = new Set(['/login', '/login.html', '/api/login', '/api/logout', '/app.js', '/style.css',
+  '/manifest.webmanifest', '/sw.js', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png', '/install.js']);
 // Fonts never change; app.js/style.css are immutable only when requested with ?v=N (bumped on each change).
-const immutable = url => url.pathname.startsWith('/fonts/') || (/^\/(app\.js|style\.css)$/.test(url.pathname) && url.searchParams.has('v'));
+const immutable = url => url.pathname.startsWith('/fonts/') || (/^\/(app\.js|style\.css|install\.js)$/.test(url.pathname) && url.searchParams.has('v'));
 const IMMUTABLE = 'public, max-age=31536000, immutable';
 const PUBLIC_PREFIXES = ['/fonts/'];
 const isPublic = p => PUBLIC_PATHS.has(p) || PUBLIC_PREFIXES.some(x => p.startsWith(x));
@@ -50,6 +51,7 @@ export async function onRequest({ request, env, next }) {
       return withHeaders(Response.redirect(new URL('/', url), 302));
     }
     const res = await next();
+    if (path === '/sw.js') return withHeaders(res, { 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' });
     if (path.startsWith('/login')) return withHeaders(res, { 'Cache-Control': 'no-store' });
     return withHeaders(res, res.ok && immutable(url) ? { 'Cache-Control': IMMUTABLE } : {});
   }
